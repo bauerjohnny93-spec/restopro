@@ -3325,69 +3325,335 @@ function recepRenderEtiquettes(el){
 var fournisseursList = ['Koch', 'Metro', 'Brake', 'Pomona', 'Transgourmet', 'Sysco', 'Eismann'];
 
 function scanOpenUnitaire(){
-  var overlay=document.createElement('div');
-  overlay.id='scan-unitaire-overlay';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f7;z-index:5000;display:flex;flex-direction:column';
+  var selectedType = 'etiquette';
+  var selectedFile = null;
+  var selectedFileData = null;
 
-  var hdr=document.createElement('div');
-  hdr.style.cssText='background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
-  var backBtn=document.createElement('button');
-  backBtn.style.cssText='background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0';
-  backBtn.innerHTML='&#8592;';
-  backBtn.onclick=function(){var o=document.getElementById('scan-unitaire-overlay');if(o)o.remove();};
-  hdr.appendChild(backBtn);
-  var hdrInfo=document.createElement('div');
-  hdrInfo.innerHTML='<div style="font-size:17px;font-weight:700;color:#fff">Scan unitaire</div>'+
-    '<div style="font-size:12px;color:rgba(255,255,255,.8)">Scanner une étiquette et enregistrer sa DLC</div>';
-  hdr.appendChild(hdrInfo);
-  overlay.appendChild(hdr);
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f7;z-index:5000;display:flex;flex-direction:column';
 
-  var wrap=document.createElement('div');
-  wrap.style.cssText='overflow-y:auto;padding:16px 14px 100px;flex:1';
+  function renderMain(){
+    ov.innerHTML = '';
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
+    var bk = document.createElement('button');
+    bk.style.cssText = 'background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    bk.innerHTML = '&#8592;'; bk.onclick = function(){ ov.remove(); };
+    hdr.appendChild(bk);
+    var ht = document.createElement('div');
+    ht.innerHTML = '<div style="font-size:17px;font-weight:700;color:#fff">Scan unitaire</div>';
+    hdr.appendChild(ht);
+    ov.appendChild(hdr);
 
-  // Type de document
-  wrap.innerHTML='<div style="font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">TYPE DE DOCUMENT</div>';
-  var typeGrid=document.createElement('div');
-  typeGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px';
-  var selectedType='etiquette';
-  [{id:'etiquette',ico:'🏷️',label:'Étiquette'},{id:'bl',ico:'📄',label:'BL'},{id:'autre',ico:'📎',label:'Autre'}].forEach(function(t){
-    var card=document.createElement('div');
-    card.id='scan-type-'+t.id;
-    card.style.cssText='background:'+(t.id===selectedType?'#e8f0ff':'#fff')+';border:2px solid '+(t.id===selectedType?'#1B6FE8':'#dde8c8')+';border-radius:12px;padding:12px;text-align:center;cursor:pointer';
-    card.innerHTML='<div style="font-size:24px;margin-bottom:4px">'+t.ico+'</div><div style="font-size:12px;font-weight:700;color:#1a1a1a">'+t.label+'</div>';
-    card.onclick=(function(tid){return function(){
-      selectedType=tid;
-      [{id:'etiquette'},{id:'bl'},{id:'autre'}].forEach(function(x){
-        var c=document.getElementById('scan-type-'+x.id);
-        if(c){c.style.background='#fff';c.style.borderColor='#dde8c8';}
-      });
-      var me=document.getElementById('scan-type-'+tid);
-      if(me){me.style.background='#e8f0ff';me.style.borderColor='#1B6FE8';}
-    };})(t.id);
-    typeGrid.appendChild(card);
-  });
-  wrap.appendChild(typeGrid);
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:16px 14px 100px';
 
-  // Preview + bouton photo
-  var preview=document.createElement('div');
-  preview.id='scan-unit-preview';
-  preview.style.cssText='background:#1a1a1a;border-radius:14px;height:180px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;overflow:hidden';
-  preview.innerHTML='<div style="text-align:center;color:#888"><div style="font-size:40px;margin-bottom:8px">📷</div><div style="font-size:13px">Prenez une photo</div></div>';
-  wrap.appendChild(preview);
+    // TYPE DE DOCUMENT
+    var typeTitle = document.createElement('div');
+    typeTitle.style.cssText = 'font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px';
+    typeTitle.textContent = 'TYPE DE DOCUMENT';
+    wrap.appendChild(typeTitle);
 
-  var photoLabel=document.createElement('label');
-  photoLabel.style.cssText='width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;box-sizing:border-box';
-  photoLabel.innerHTML='<span style="font-size:18px">📷</span> Prendre / Importer photo'+
-    '<input type="file" accept="image/*" capture="environment" style="display:none" onchange="scanUnitaireLancer(this,selectedType||\'etiquette\')">';
-  wrap.appendChild(photoLabel);
+    var types = [{id:'etiquette',icon:'🏷️',label:'Étiquette'},{id:'bl',icon:'📄',label:'BL / Facture'},{id:'autre',icon:'📎',label:'Autre'}];
+    var typeGrid = document.createElement('div');
+    typeGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px';
+    types.forEach(function(t){
+      var btn = document.createElement('button');
+      var active = t.id === selectedType;
+      btn.id = 'scan-type-'+t.id;
+      btn.style.cssText = 'background:'+(active?'#e8f4ff':'#f0fae0')+';border:2px solid '+(active?'#1B6FE8':'#dde8c8')+';border-radius:14px;padding:14px 8px;cursor:pointer;text-align:center';
+      btn.innerHTML = '<div style="font-size:28px;margin-bottom:6px">'+t.icon+'</div><div style="font-size:12px;font-weight:700;color:'+(active?'#1B6FE8':'#555')+'">'+t.label+'</div>';
+      btn.onclick = function(){
+        selectedType = t.id;
+        renderMain();
+      };
+      typeGrid.appendChild(btn);
+    });
+    wrap.appendChild(typeGrid);
 
-  var resultDiv=document.createElement('div');
-  resultDiv.id='scan-unit-result';
-  wrap.appendChild(resultDiv);
+    // CAPTURE
+    var capTitle = document.createElement('div');
+    capTitle.style.cssText = 'font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px';
+    capTitle.textContent = 'CAPTURE';
+    wrap.appendChild(capTitle);
 
-  overlay.appendChild(wrap);
-  document.body.appendChild(overlay);
+    // Bouton photo
+    var photoLabel = document.createElement('label');
+    photoLabel.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;background:#1B6FE8;color:#fff;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box;margin-bottom:10px';
+    var photoSpan = document.createElement('span'); photoSpan.textContent = '📷';
+    var photoTxt = document.createTextNode(' Prendre une photo');
+    var photoInp = document.createElement('input'); photoInp.type='file'; photoInp.accept='image/*'; photoInp.capture='environment'; photoInp.style.display='none';
+    photoLabel.appendChild(photoSpan); photoLabel.appendChild(photoTxt); photoLabel.appendChild(photoInp);
+    wrap.appendChild(photoLabel);
+
+    // Bouton import
+    var importLabel = document.createElement('label');
+    importLabel.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;background:#f0fae0;color:#1B6FE8;border:1.5px solid #1B6FE8;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box;margin-bottom:14px';
+    var importSpan = document.createElement('span'); importSpan.textContent = '📁';
+    var importTxt = document.createTextNode(' Importer PDF / image');
+    var importInp = document.createElement('input'); importInp.type='file'; importInp.accept='image/*,application/pdf'; importInp.style.display='none';
+    importLabel.appendChild(importSpan); importLabel.appendChild(importTxt); importLabel.appendChild(importInp);
+    wrap.appendChild(importLabel);
+
+    // Zone aperçu fichier
+    var filePreview = document.createElement('div');
+    filePreview.id = 'scan-unit-preview';
+    if(selectedFile){
+      filePreview.style.cssText = 'background:#f0fae0;border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:center';
+      var thumb = document.createElement('div');
+      thumb.style.cssText = 'width:60px;height:60px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#dde8c8';
+      if(selectedFileData && selectedFile.type.startsWith('image/')){
+        thumb.innerHTML = '<img src="'+selectedFileData+'" style="width:100%;height:100%;object-fit:cover">';
+      } else {
+        thumb.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px">📄</div>';
+      }
+      filePreview.appendChild(thumb);
+      var fileInfo = document.createElement('div');
+      fileInfo.innerHTML =
+        '<div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:#888">Fichier</span><span style="font-size:12px;font-weight:600">'+selectedFile.name+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:12px;color:#888">Type</span><span style="font-size:12px;font-weight:600">'+selectedFile.type+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:12px;color:#888">Taille</span><span style="font-size:12px;font-weight:600">'+Math.round(selectedFile.size/1024/1024*100)/100+' Mo</span></div>';
+      filePreview.appendChild(fileInfo);
+    }
+    wrap.appendChild(filePreview);
+
+    ov.appendChild(wrap);
+
+    // Barre bas
+    var btns = document.createElement('div');
+    btns.style.cssText = 'background:#f0fae0;border-top:1px solid #dde8c8;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;flex-shrink:0';
+    var lancerBtn = document.createElement('button');
+    lancerBtn.style.cssText = 'width:100%;background:'+(selectedFile?'#1B6FE8':'#bbb')+';color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box';
+    lancerBtn.innerHTML = '✦ Lancer l\'extraction';
+    lancerBtn.disabled = !selectedFile;
+    lancerBtn.onclick = function(){ if(selectedFile) lancerExtraction(); };
+    var cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'width:100%;background:none;color:#888;border:none;padding:8px;font-size:14px;cursor:pointer';
+    cancelBtn.textContent = 'Annuler';
+    cancelBtn.onclick = function(){ ov.remove(); };
+    btns.appendChild(lancerBtn);
+    btns.appendChild(cancelBtn);
+    ov.appendChild(btns);
+
+    // Handlers après insertion
+    photoInp.addEventListener('change', function(){
+      if(!this.files||!this.files[0]) return;
+      selectedFile = this.files[0];
+      var r = new FileReader(); r.onload = function(e){ selectedFileData = e.target.result; renderMain(); }; r.readAsDataURL(selectedFile);
+    });
+    importInp.addEventListener('change', function(){
+      if(!this.files||!this.files[0]) return;
+      selectedFile = this.files[0];
+      var r = new FileReader(); r.onload = function(e){ selectedFileData = e.target.result; renderMain(); }; r.readAsDataURL(selectedFile);
+    });
+  }
+
+  function lancerExtraction(){
+    ov.innerHTML = '';
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));flex-shrink:0';
+    hdr.innerHTML = '<div style="font-size:17px;font-weight:700;color:#fff">Extraction...</div>';
+    ov.appendChild(hdr);
+
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px';
+
+    // Spinner
+    var spinner = document.createElement('div');
+    spinner.style.cssText = 'width:48px;height:48px;border:4px solid #dde8c8;border-top-color:#1B6FE8;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:28px';
+    wrap.appendChild(spinner);
+
+    var steps = [
+      {icon:'📤', label:'Téléversement...'},
+      {icon:'🔍', label:'Analyse Claude Vision...'},
+      {icon:'💾', label:'Enregistrement...'}
+    ];
+    steps.forEach(function(s, i){
+      var row = document.createElement('div');
+      row.id = 'extract-step-'+i;
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:12px;opacity:'+(i===0?'1':'0.4');
+      row.innerHTML = '<span style="font-size:18px">'+s.icon+'</span><span style="font-size:14px;color:#555">'+s.label+'</span>';
+      wrap.appendChild(row);
+    });
+    ov.appendChild(wrap);
+
+    // Animer les étapes
+    setTimeout(function(){ var s=document.getElementById('extract-step-1'); if(s) s.style.opacity='1'; }, 800);
+    setTimeout(function(){ var s=document.getElementById('extract-step-2'); if(s) s.style.opacity='1'; }, 1600);
+
+    // Construire le prompt selon le type
+    var prompts = {
+      etiquette: "Étiquette alimentaire. JSON pur: {nom, lot, dlc_jj_mm_aaaa, poids_kg, fournisseur, temperature, categorie}. Absent = null.",
+      bl: "Bon de livraison ou facture fournisseur. JSON pur: {fournisseur_nom, fournisseur_siret, numero_bl, date_jj_mm_aaaa, montant_ht, montant_ttc, produits:[{nom, qte, unite, prix_u}]}. Absent = null.",
+      autre: "Document. JSON pur: {type_document, date, emetteur, destinataire, reference, montant, notes}. Absent = null."
+    };
+
+    var b64 = selectedFileData.split(',')[1];
+    var mime = selectedFile.type.startsWith('application/pdf') ? 'image/jpeg' : (selectedFile.type || 'image/jpeg');
+    if(mime === 'application/pdf') b64 = selectedFileData.split(',')[1]; // fallback
+
+    var hdrs = {"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
+    if(parametresData&&parametresData.anthropicApiKey) hdrs["x-api-key"] = parametresData.anthropicApiKey;
+
+    fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST", headers:hdrs,
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:1500,
+        messages:[{role:"user", content:[
+          {type:"image", source:{type:"base64", media_type: mime.startsWith('image/')?mime:'image/jpeg', data:b64}},
+          {type:"text", text: prompts[selectedType]||prompts.autre}
+        ]}]
+      })
+    })
+    .then(function(r){return r.json();})
+    .then(function(data){
+      var txt = data.content&&data.content[0] ? data.content[0].text : '';
+      var usage = data.usage || {};
+      var tokensIn = usage.input_tokens||0;
+      var tokensOut = usage.output_tokens||0;
+      var cout = Math.round((tokensIn/1000000*3 + tokensOut/1000000*15)*10000)/100;
+      txt = txt.replace(/```json|```/g,'').trim();
+      var result;
+      try{ result = JSON.parse(txt); } catch(ex){ result = {erreur: "Impossible de parser", raw: txt}; }
+
+      // Score de confiance basique
+      var fields = Object.values(result).filter(function(v){return v!==null&&v!==undefined&&v!=='';});
+      var totalFields = Object.keys(result).length;
+      var confidence = totalFields>0 ? Math.round(fields.length/totalFields*100) : 0;
+
+      afficherResultat(result, tokensIn, tokensOut, cout, confidence, txt);
+    })
+    .catch(function(err){
+      ov.innerHTML = '';
+      var errDiv = document.createElement('div');
+      errDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px;text-align:center';
+      errDiv.innerHTML = '<div style="font-size:48px;margin-bottom:16px">❌</div><div style="font-size:15px;font-weight:700;color:#e53935;margin-bottom:8px">Erreur de connexion</div><div style="font-size:13px;color:#888;margin-bottom:20px">Vérifiez votre clé API dans Paramètres → IA / API</div>';
+      var retryBtn = document.createElement('button');
+      retryBtn.style.cssText = 'background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer';
+      retryBtn.textContent = 'Retour';
+      retryBtn.onclick = function(){ renderMain(); };
+      errDiv.appendChild(retryBtn);
+      ov.appendChild(errDiv);
+    });
+  }
+
+  function afficherResultat(result, tokensIn, tokensOut, cout, confidence, rawTxt){
+    ov.innerHTML = '';
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
+    var bk = document.createElement('button');
+    bk.style.cssText = 'background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    bk.innerHTML = '&#8592;'; bk.onclick = function(){ renderMain(); selectedFile=null; selectedFileData=null; renderMain(); };
+    hdr.appendChild(bk);
+    hdr.innerHTML += '<div style="font-size:17px;font-weight:700;color:#fff">Résultat</div>';
+    ov.appendChild(hdr);
+
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:14px 14px 100px';
+
+    // Header résultat
+    var resHdr = document.createElement('div');
+    resHdr.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px';
+    var resTitle = document.createElement('div');
+    resTitle.innerHTML = '<div style="font-size:13px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em">RÉSULTAT</div>'+
+      '<div style="font-size:11px;color:#bbb;margin-top:3px">'+tokensIn+' tokens in · '+tokensOut+' out · $'+cout+'</div>';
+    var confBadge = document.createElement('div');
+    var confColor = confidence>=80?'#16a34a':confidence>=50?'#e67e22':'#e53935';
+    confBadge.style.cssText = 'background:'+(confidence>=80?'#e8f5e9':confidence>=50?'#fff8e1':'#ffebee')+';color:'+confColor+';border-radius:20px;padding:5px 12px;font-size:12px;font-weight:800;flex-shrink:0';
+    confBadge.textContent = 'Confiance '+confidence+'/100';
+    resHdr.appendChild(resTitle); resHdr.appendChild(confBadge);
+    wrap.appendChild(resHdr);
+
+    // JSON extrait
+    var jsonTitle = document.createElement('div');
+    jsonTitle.style.cssText = 'font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px';
+    jsonTitle.textContent = 'EXTRACTION (JSON)';
+    wrap.appendChild(jsonTitle);
+
+    var jsonBox = document.createElement('div');
+    jsonBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:14px;font-family:monospace;font-size:12px;color:#e8f0fe;line-height:1.7;margin-bottom:14px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:250px;overflow-y:auto';
+    jsonBox.textContent = JSON.stringify(result, null, 2);
+    wrap.appendChild(jsonBox);
+
+    ov.appendChild(wrap);
+
+    // Boutons
+    var btns = document.createElement('div');
+    btns.style.cssText = 'background:#f0fae0;border-top:1px solid #dde8c8;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;flex-shrink:0';
+
+    var valBtn = document.createElement('button');
+    valBtn.style.cssText = 'width:100%;background:#16a34a;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box';
+    valBtn.innerHTML = '✓ Valider';
+    valBtn.onclick = function(){
+      // Sauvegarder selon le type
+      if(selectedType==='bl'||selectedType==='autre'){
+        // → Module Achats
+        var fourn = result.fournisseur_nom||result.fournisseur||result.emetteur||'Fournisseur inconnu';
+        var montant = result.montant_ht||result.montant||0;
+        var dateDoc = result.date_jj_mm_aaaa||result.date||new Date().toISOString().split('T')[0];
+        if(dateDoc&&dateDoc.match(/\d{2}\/\d{2}\/\d{4}/)){
+          var p=dateDoc.split('/'); dateDoc=p[2]+'-'+p[1]+'-'+p[0];
+        }
+        achatsData.unshift({
+          id:Date.now(), fourn:fourn, produit:result.numero_bl||'BL scanné',
+          qte:1, unite:'facture', montant:parseFloat(montant)||0,
+          date:dateDoc, facture:result.numero_bl||'',
+          bl_photo:selectedFileData, bl_data:result,
+          source:'scan_unitaire', resto:currentResto||'resto1'
+        });
+        // Ajouter fournisseur à la liste
+        if(fourn&&fournisseursList.indexOf(fourn)<0) fournisseursList.push(fourn);
+        // Si des produits sont listés, ajouter au stock
+        if(result.produits&&Array.isArray(result.produits)){
+          result.produits.forEach(function(p){
+            if(!p.nom) return;
+            var qty = parseFloat(p.qte)||1;
+            var existing = stockItems.find(function(s){return s.nom.toLowerCase()===p.nom.toLowerCase();});
+            if(existing){ existing.qte=Math.round((existing.qte+qty)*100)/100; existing.fourn=fourn; }
+            else stockItems.unshift({id:Date.now()+Math.random(),nom:p.nom,cat:'Alimentaire',qte:qty,unite:p.unite||'kg',min:0,fourn:fourn,dlc:'',lot:'',scans:0});
+          });
+        }
+        auditEnregistrer('scanner','BL/Facture scanné',fourn,'Scanner');
+        saveAll();
+        ov.remove();
+        showToast('✅ BL enregistré dans Achats !','success',3000);
+      } else if(selectedType==='etiquette'){
+        // → Stock directement
+        var nom = result.nom||'Produit scanné';
+        var poids = parseFloat(result.poids_kg)||1;
+        var dlc = result.dlc_jj_mm_aaaa||null;
+        if(dlc&&dlc.match(/\d{2}\/\d{2}\/\d{4}/)){var p=dlc.split('/');dlc=p[2]+'-'+p[1]+'-'+p[0];}
+        var existing = stockItems.find(function(s){return s.nom.toLowerCase()===nom.toLowerCase();});
+        if(existing){ existing.qte=Math.round((existing.qte+poids)*100)/100; if(dlc)existing.dlc=dlc; if(result.lot)existing.lot=result.lot; existing.scans=(existing.scans||0)+1; }
+        else stockItems.unshift({id:Date.now(),nom:nom,cat:'Alimentaire',qte:poids,unite:'kg',min:0,fourn:result.fournisseur||'',dlc:dlc||'',lot:result.lot||'',scans:1});
+        auditEnregistrer('scanner','Étiquette scannée',nom,'Scanner');
+        saveAll();
+        ov.remove();
+        showToast('✅ '+nom+' ajouté au stock !','success',3000);
+      } else {
+        saveAll(); ov.remove();
+        showToast('✅ Document enregistré !','success');
+      }
+    };
+
+    var rejBtn = document.createElement('button');
+    rejBtn.style.cssText = 'width:100%;background:#ffebee;color:#e53935;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;box-sizing:border-box';
+    rejBtn.innerHTML = '✕ Rejeter';
+    rejBtn.onclick = function(){ selectedFile=null; selectedFileData=null; renderMain(); };
+
+    var newBtn = document.createElement('button');
+    newBtn.style.cssText = 'width:100%;background:none;color:#1B6FE8;border:none;padding:10px;font-size:14px;cursor:pointer;font-weight:600';
+    newBtn.innerHTML = '↺ Nouveau scan';
+    newBtn.onclick = function(){ selectedFile=null; selectedFileData=null; renderMain(); };
+
+    btns.appendChild(valBtn); btns.appendChild(rejBtn); btns.appendChild(newBtn);
+    ov.appendChild(btns);
+  }
+
+  renderMain();
+  document.body.appendChild(ov);
 }
+
 
 function recepOpenForm(){
   var today=new Date();
@@ -3511,98 +3777,320 @@ function recepDemarrer(overlay){
 }
 
 function recepOpenFicheReception(fourn, dateVal){
-  var overlay=document.createElement('div');
-  overlay.id='recep-fiche-overlay';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f7;z-index:5000;display:flex;flex-direction:column';
+  // Session de scan
+  var session = {
+    fourn: fourn,
+    date: dateVal,
+    etiquettes: [],      // produits scannés via photo IA
+    photoBL: null,
+    temp: null,
+    conforme: 'conforme',
+    obs: '',
+    signe: currentUser || ''
+  };
 
-  // Header
-  var hdr=document.createElement('div');
-  hdr.style.cssText='background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
-  hdr.innerHTML='<button onclick="document.getElementById(\'recep-fiche-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">&#8592;</button>'+
-    '<div><div style="font-size:16px;font-weight:700;color:#fff">Nouvelle reception</div>'+
-    '<div style="font-size:12px;color:rgba(255,255,255,.8)">'+fourn+' · '+dateVal+'</div></div>';
-  overlay.appendChild(hdr);
+  var ov = document.createElement('div');
+  ov.id = 'recep-fiche-overlay';
+  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f7;z-index:5000;display:flex;flex-direction:column';
+  document.body.appendChild(ov);
 
-  var wrap=document.createElement('div');
-  wrap.style.cssText='overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 14px 100px;flex:1';
+  function renderScanEtiquettes(){
+    ov.innerHTML = '';
 
-  // PHOTO BL
-  var photoSection=document.createElement('div');
-  photoSection.style.cssText='margin-bottom:18px';
-  photoSection.innerHTML='<div style="font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">PHOTO BON DE LIVRAISON</div>';
-  var photoPreview=document.createElement('div');
-  photoPreview.id='recep-bl-preview';
-  photoPreview.style.cssText='background:#1a1a1a;border-radius:12px;height:160px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;overflow:hidden;position:relative';
-  photoPreview.innerHTML='<div style="text-align:center;color:#888"><div style="font-size:36px;margin-bottom:6px">📷</div><div style="font-size:12px">Aucune photo</div></div>';
-  var photoLabel=document.createElement('label');
-  photoLabel.style.cssText='display:flex;align-items:center;justify-content:center;gap:8px;background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box';
-  photoLabel.innerHTML='<span style="font-size:18px">📷</span> Prendre / Importer photo BL'+
-    '<input type="file" accept="image/*" capture="environment" style="display:none" onchange="recepSetPhotoBL(this)">';
-  photoSection.appendChild(photoPreview);
-  photoSection.appendChild(photoLabel);
-  wrap.appendChild(photoSection);
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
+    var bk = document.createElement('button');
+    bk.style.cssText = 'background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    bk.innerHTML = '&#8592;'; bk.onclick = function(){ ov.remove(); };
+    hdr.appendChild(bk);
+    var hi = document.createElement('div'); hi.style.cssText = 'flex:1';
+    hi.innerHTML = '<div style="font-size:16px;font-weight:700;color:#fff">Réception — scan</div><div style="font-size:12px;color:rgba(255,255,255,.8)">'+fourn+' · '+dateVal+'</div>';
+    hdr.appendChild(hi);
+    var badge = document.createElement('div');
+    badge.style.cssText = 'background:#22c55e;color:#fff;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:700;flex-shrink:0';
+    badge.textContent = session.etiquettes.length + ' scan' + (session.etiquettes.length!==1?'s':'');
+    hdr.appendChild(badge);
+    ov.appendChild(hdr);
 
-  // TEMPERATURE RECEPTION
-  var tempSection=document.createElement('div');
-  tempSection.style.cssText='margin-bottom:18px';
-  tempSection.innerHTML='<div style="font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">TEMPERATURE A RECEPTION</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-      '<div class="ff"><label>Temp. produit (°C)</label><input type="number" id="recep-temp" step="0.1" placeholder="ex: 4" style="font-size:20px;font-weight:700;text-align:center;padding:14px;border-radius:12px"></div>'+
-      '<div class="ff"><label>Conforme ?</label><select id="recep-conforme" style="font-size:16px;font-weight:700;text-align:center;padding:14px;border-radius:12px;color:#1a1a1a">'+
-        '<option value="conforme">✅ Conforme</option>'+
-        '<option value="non_conforme">❌ Non conforme</option>'+
-        '<option value="reserve">⚠️ Reserve</option>'+
-      '</select></div>'+
-    '</div>';
-  wrap.appendChild(tempSection);
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:0 0 100px';
 
-  // PRODUITS RECUS
-  var prodsSection=document.createElement('div');
-  prodsSection.style.cssText='margin-bottom:18px';
-  prodsSection.innerHTML='<div style="font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">PRODUITS RECUS</div>';
-  var prodsList=document.createElement('div');
-  prodsList.id='recep-prods-list';
-  prodsSection.appendChild(prodsList);
+    // Zone preview photo
+    var previewZone = document.createElement('div');
+    previewZone.id = 'etiq-preview-zone';
+    previewZone.style.cssText = 'background:#1a1a1a;height:220px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;flex-shrink:0';
+    if(session._lastPhoto){
+      previewZone.innerHTML = '<img src="'+session._lastPhoto+'" style="width:100%;height:100%;object-fit:cover">';
+    } else {
+      previewZone.innerHTML = "<div style='text-align:center;color:#555'><div style='font-size:48px;margin-bottom:8px'>📷</div><div style='font-size:13px'>Place l'étiquette dans le cadre, puis appuie sur SHOOT</div></div>";
+      // Cadre de visée
+      var cadre = document.createElement('div');
+      cadre.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;height:60%;border:2px solid #1B6FE8;border-radius:8px;pointer-events:none';
+      previewZone.appendChild(cadre);
+    }
+    wrap.appendChild(previewZone);
 
-  // Bouton ajouter produit
-  var addProdBtn=document.createElement('button');
-  addProdBtn.style.cssText='width:100%;background:#f0fae0;border:2px dashed #1B6FE8;border-radius:12px;padding:13px;font-size:14px;font-weight:700;color:#1B6FE8;cursor:pointer;margin-top:6px';
-  addProdBtn.innerHTML='+ Ajouter un produit';
-  addProdBtn.onclick=function(){recepAjouterProduitLigne(prodsList);};
-  prodsSection.appendChild(addProdBtn);
+    // Résultat IA si en cours
+    var iaZone = document.createElement('div');
+    iaZone.id = 'etiq-ia-zone';
+    iaZone.style.cssText = 'padding:0 14px';
+    wrap.appendChild(iaZone);
 
-  // Ligne initiale
-  recepAjouterProduitLigne(prodsList);
-  wrap.appendChild(prodsSection);
+    // Liste des étiquettes scannées
+    if(session.etiquettes.length){
+      var listTitle = document.createElement('div');
+      listTitle.style.cssText = 'font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;padding:12px 14px 6px';
+      listTitle.textContent = 'PRODUITS SCANNÉS';
+      wrap.appendChild(listTitle);
+      session.etiquettes.forEach(function(e, i){
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f0f0f0;background:#fff';
+        row.innerHTML =
+          '<div style="color:#22c55e;font-size:16px;flex-shrink:0">✓</div>'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-size:13px;font-weight:700;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.nom+'</div>'+
+            '<div style="font-size:11px;color:#888;margin-top:2px">lot '+(e.lot||'?')+' · '+(e.poids?e.poids+' kg · ':'')+'DLC '+(e.dlc||'?')+'</div>'+
+          '</div>'+
+          '<button onclick="session_recep_etiq_del('+i+')" style="background:#ffebee;color:#e53935;border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Suppr</button>';
+        wrap.appendChild(row);
+      });
+    }
 
-  // OBSERVATIONS
-  var obsSection=document.createElement('div');
-  obsSection.style.cssText='margin-bottom:18px';
-  obsSection.innerHTML='<div class="ff"><label>Observations / Reservations</label><textarea id="recep-obs" rows="2" placeholder="Ex: Cartons abimes, temperature limite..." style="width:100%;padding:11px 14px;border:1.5px solid #dde8c8;border-radius:12px;font-size:14px;font-family:inherit;resize:none;background:#fff;box-sizing:border-box"></textarea></div>';
-  wrap.appendChild(obsSection);
+    ov.appendChild(wrap);
 
-  // SIGNE PAR
-  var signeSection=document.createElement('div');
-  signeSection.innerHTML='<div class="ff"><label>Receptionne par</label><input type="text" id="recep-signe" value="'+(currentUser||'')+'" placeholder="Nom de l&#39;employe"></div>';
-  wrap.appendChild(signeSection);
-  overlay.appendChild(wrap);
+    // Barre du bas
+    var btns = document.createElement('div');
+    btns.style.cssText = 'background:#f0fae0;border-top:1px solid #dde8c8;padding:12px 14px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;flex-shrink:0';
 
-  // BOUTONS BAS
-  var btnsBar=document.createElement('div');
-  btnsBar.style.cssText='background:#f0fae0;border-top:1px solid #dde8c8;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;flex-shrink:0';
-  var valBtn=document.createElement('button');
-  valBtn.style.cssText='flex:1;background:#22c55e;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer';
-  valBtn.innerHTML='&#10003; Valider la reception';
-  valBtn.onclick=function(){recepValiderFiche(fourn,dateVal,overlay);};
-  var cancelBtn=document.createElement('button');
-  cancelBtn.style.cssText='background:none;color:#888;border:1.5px solid #dde8c8;border-radius:14px;padding:15px;font-size:14px;font-weight:600;cursor:pointer;min-width:80px';
-  cancelBtn.textContent='Annuler';
-  cancelBtn.onclick=function(){overlay.remove();};
-  btnsBar.appendChild(valBtn);
-  btnsBar.appendChild(cancelBtn);
-  overlay.appendChild(btnsBar);
-  document.body.appendChild(overlay);
+    // Bouton SHOOT
+    var shootLabel = document.createElement('label');
+    shootLabel.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;background:#1B6FE8;color:#fff;border-radius:14px;padding:16px;font-size:16px;font-weight:800;cursor:pointer;width:100%;box-sizing:border-box';
+    var shootSpan = document.createElement('span'); shootSpan.textContent = '📷';
+    var shootTxt = document.createTextNode(' SHOOT');
+    var shootInp = document.createElement('input'); shootInp.type='file'; shootInp.accept='image/*'; shootInp.capture='environment'; shootInp.style.display='none';
+    shootLabel.appendChild(shootSpan); shootLabel.appendChild(shootTxt); shootLabel.appendChild(shootInp);
+    btns.appendChild(shootLabel);
+
+    // Bouton Fin de scan
+    var finBtn = document.createElement('button');
+    finBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;background:#22c55e;color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box';
+    finBtn.innerHTML = '✓ Fin de scan des étiquettes →';
+    finBtn.onclick = function(){ renderBLScan(); };
+    btns.appendChild(finBtn);
+
+    ov.appendChild(btns);
+
+    // Handler SHOOT après insertion
+    shootInp.addEventListener('change', function(){
+      if(!this.files||!this.files[0]) return;
+      var file = this.files[0];
+      var reader = new FileReader();
+      reader.onload = function(e){
+        session._lastPhoto = e.target.result;
+        // Afficher preview
+        var pz = document.getElementById('etiq-preview-zone');
+        if(pz) pz.innerHTML = '<img src="'+e.target.result+'" style="width:100%;height:100%;object-fit:cover">';
+        // Lancer analyse IA
+        var iz = document.getElementById('etiq-ia-zone');
+        if(iz) iz.innerHTML = '<div style="text-align:center;padding:14px;font-size:13px;color:#1B6FE8;font-weight:700">⚡ Analyse en cours...</div>';
+        var b64 = e.target.result.split(',')[1];
+        var mime = file.type||'image/jpeg';
+        var hdrs = {"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
+        if(parametresData&&parametresData.anthropicApiKey) hdrs["x-api-key"]=parametresData.anthropicApiKey;
+        fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST", headers:hdrs,
+          body:JSON.stringify({
+            model:"claude-sonnet-4-6", max_tokens:400,
+            messages:[{role:"user",content:[
+              {type:"image",source:{type:"base64",media_type:mime,data:b64}},
+              {type:"text",text:"Etiquette alimentaire. JSON pur uniquement: {nom, lot, dlc_format_jj_mm_aaaa, poids_kg, fournisseur}. Si absent mets null."}
+            ]}]
+          })
+        })
+        .then(function(r){return r.json();})
+        .then(function(data){
+          var txt = data.content&&data.content[0]?data.content[0].text:'';
+          txt = txt.replace(/```json|```/g,'').trim();
+          var info;
+          try{ info = JSON.parse(txt); } catch(ex){ info = {nom:'Produit inconnu',lot:null,dlc_format_jj_mm_aaaa:null,poids_kg:null}; }
+          // Normaliser la DLC
+          var dlc = info.dlc_format_jj_mm_aaaa||null;
+          if(dlc&&dlc.match(/\d{2}\/\d{2}\/\d{4}/)){
+            var p=dlc.split('/'); dlc=p[2]+'-'+p[1]+'-'+p[0];
+          }
+          var etiq = {nom:info.nom||'Produit scanné', lot:info.lot||null, dlc:dlc, poids:info.poids_kg||null, fourn:info.fournisseur||fourn};
+          session.etiquettes.push(etiq);
+          session._lastPhoto = null;
+          renderScanEtiquettes();
+        })
+        .catch(function(){
+          var iz2 = document.getElementById('etiq-ia-zone');
+          if(iz2) iz2.innerHTML = '<div style="background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700">❌ Erreur — Vérifiez votre clé API dans Paramètres</div>';
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Exposer la suppression globalement
+  window.session_recep_etiq_del = function(i){ session.etiquettes.splice(i,1); renderScanEtiquettes(); };
+
+  function renderBLScan(){
+    ov.innerHTML = '';
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
+    var bk = document.createElement('button');
+    bk.style.cssText = 'background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    bk.innerHTML = '&#8592;'; bk.onclick = function(){ renderScanEtiquettes(); };
+    hdr.appendChild(bk);
+    var hi = document.createElement('div');
+    hi.innerHTML = '<div style="font-size:16px;font-weight:700;color:#fff">Réception — scan</div><div style="font-size:12px;color:rgba(255,255,255,.8)">'+fourn+' · '+session.etiquettes.length+' produit(s) scanné(s)</div>';
+    hdr.appendChild(hi);
+    ov.appendChild(hdr);
+
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:14px 14px 100px';
+
+    // Résumé produits
+    var sumTitle = document.createElement('div');
+    sumTitle.style.cssText = 'font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px';
+    sumTitle.textContent = 'RÉCAPITULATIF — '+session.etiquettes.length+' PRODUIT(S)';
+    wrap.appendChild(sumTitle);
+    session.etiquettes.forEach(function(e,i){
+      var row = document.createElement('div');
+      row.style.cssText = 'background:#f0fae0;border-radius:10px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px';
+      row.innerHTML = '<div style="color:#22c55e;font-size:16px">✓</div>'+
+        '<div style="flex:1"><div style="font-size:13px;font-weight:700">'+(e.nom||'?')+'</div>'+
+        '<div style="font-size:11px;color:#888">lot '+(e.lot||'?')+' · '+(e.poids?e.poids+' kg · ':'')+'DLC '+(e.dlc||'?')+'</div></div>'+
+        '<div style="font-size:11px;color:#888">#'+(i+1)+'</div>';
+      wrap.appendChild(row);
+    });
+
+    // BL / Facture
+    var blTitle = document.createElement('div');
+    blTitle.style.cssText = 'font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px';
+    blTitle.textContent = 'BL / FACTURE';
+    wrap.appendChild(blTitle);
+
+    var blStatus = document.createElement('div');
+    blStatus.style.cssText = 'font-size:12px;color:#888;margin-bottom:8px';
+    blStatus.textContent = session.photoBL ? '✅ BL scanné' : 'Pas encore scanné.';
+    wrap.appendChild(blStatus);
+
+    var blLabel = document.createElement('label');
+    blLabel.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;background:#f0fae0;color:#1B6FE8;border:1.5px solid #1B6FE8;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box;margin-bottom:14px';
+    var blSpan = document.createElement('span'); blSpan.textContent = '📄';
+    var blTxt = document.createTextNode(' Scanner BL / Facture');
+    var blInp = document.createElement('input'); blInp.type='file'; blInp.accept='image/*,application/pdf'; blInp.style.display='none';
+    blLabel.appendChild(blSpan); blLabel.appendChild(blTxt); blLabel.appendChild(blInp);
+    wrap.appendChild(blLabel);
+    blInp.addEventListener('change',function(){
+      if(!this.files||!this.files[0]) return;
+      var r=new FileReader(); r.onload=function(e){ session.photoBL=e.target.result; blStatus.textContent='✅ BL importé'; blStatus.style.color='#16a34a'; }; r.readAsDataURL(this.files[0]);
+    });
+
+    // Température
+    var tempDiv = document.createElement('div'); tempDiv.className='ff';
+    var tempLbl = document.createElement('label'); tempLbl.textContent='Température à réception (°C)'; tempDiv.appendChild(tempLbl);
+    var tempInp = document.createElement('input'); tempInp.type='number'; tempInp.id='recep-temp'; tempInp.step='0.1'; tempInp.placeholder='ex: 4'; tempInp.style.cssText='font-size:20px;font-weight:700;text-align:center;padding:14px;border-radius:12px;border:1.5px solid #dde8c8;width:100%;box-sizing:border-box;background:#fff'; tempDiv.appendChild(tempInp);
+    wrap.appendChild(tempDiv);
+
+    var confDiv = document.createElement('div'); confDiv.className='ff';
+    var confLbl = document.createElement('label'); confLbl.textContent='Conforme ?'; confDiv.appendChild(confLbl);
+    var confSel = document.createElement('select'); confSel.id='recep-conforme'; confSel.style.cssText='font-size:16px;font-weight:700;padding:14px;border-radius:12px;border:1.5px solid #dde8c8;width:100%;box-sizing:border-box;background:#fff';
+    [{v:'conforme',l:'✅ Conforme'},{v:'reserve',l:'⚠️ Réserve'},{v:'non_conforme',l:'❌ Non conforme'}].forEach(function(o){var op=document.createElement('option');op.value=o.v;op.textContent=o.l;confSel.appendChild(op);});
+    confDiv.appendChild(confSel); wrap.appendChild(confDiv);
+
+    var obsDiv = document.createElement('div'); obsDiv.className='ff';
+    var obsLbl = document.createElement('label'); obsLbl.textContent='Observations'; obsDiv.appendChild(obsLbl);
+    var obsTa = document.createElement('textarea'); obsTa.id='recep-obs'; obsTa.rows=2; obsTa.placeholder='Ex: Cartons abîmés, température limite...'; obsTa.style.cssText='width:100%;padding:11px 14px;border:1.5px solid #dde8c8;border-radius:12px;font-size:14px;font-family:inherit;resize:none;background:#fff;box-sizing:border-box'; obsDiv.appendChild(obsTa);
+    wrap.appendChild(obsDiv);
+
+    ov.appendChild(wrap);
+
+    var btns = document.createElement('div');
+    btns.style.cssText = 'background:#f0fae0;border-top:1px solid #dde8c8;padding:12px 14px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;flex-shrink:0';
+
+    var bouclerBtn = document.createElement('button');
+    bouclerBtn.style.cssText = 'width:100%;background:#22c55e;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box';
+    bouclerBtn.innerHTML = '✓ Boucler &amp; rapprocher';
+    bouclerBtn.onclick = function(){ validerSession(true); };
+
+    var sansBLBtn = document.createElement('button');
+    sansBLBtn.style.cssText = 'width:100%;background:#f0fae0;color:#555;border:1.5px solid #dde8c8;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;box-sizing:border-box';
+    sansBLBtn.innerHTML = '☑ Valider sans BL (registre HACCP)';
+    sansBLBtn.onclick = function(){
+      if(confirm("Valider sans BL ? Les étiquettes seront archivées comme registre HACCP.")){
+        validerSession(false);
+      }
+    };
+
+    btns.appendChild(bouclerBtn);
+    btns.appendChild(sansBLBtn);
+    ov.appendChild(btns);
+  }
+
+  function validerSession(avecBL){
+    var temp = parseFloat(document.getElementById('recep-temp')?document.getElementById('recep-temp').value:0)||null;
+    var conforme = document.getElementById('recep-conforme')?document.getElementById('recep-conforme').value:'conforme';
+    var obs = document.getElementById('recep-obs')?document.getElementById('recep-obs').value:'';
+    var now = new Date();
+    var statut = conforme==='conforme'?'validee':conforme==='non_conforme'?'critique':'alerte';
+
+    var prods = session.etiquettes.map(function(e){
+      return {nom:e.nom, qte:e.poids||1, lot:e.lot||'', dlc:e.dlc||'', temp:temp, conforme:conforme==='conforme'?'conforme':'non_conforme'};
+    });
+
+    var recep = {
+      id: Date.now(),
+      fourn: fourn,
+      date: dateVal,
+      heure: String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'),
+      art: prods.length+' étiq.',
+      lignes: prods.length+' lignes',
+      montantHT: 0,
+      tempReception: temp,
+      conforme: conforme,
+      obs: obs,
+      signe: session.signe||currentUser||'—',
+      photoBL: avecBL&&session.photoBL ? session.photoBL : null,
+      lignesProduits: prods,
+      statut: statut,
+      label: statut==='validee'?'Validée':statut==='critique'?'Non conforme':'Réserve',
+      produits: prods.map(function(p){return p.nom;}).join(', '),
+      resto: currentResto||'resto1',
+      bl: avecBL ? 'BL-'+Date.now().toString().slice(-6) : 'HACCP-'+Date.now().toString().slice(-6)
+    };
+
+    recepItems.unshift(recep);
+
+    // → STOCK : ajouter chaque produit scanné
+    prods.forEach(function(p){
+      if(!p.nom) return;
+      var qty = parseFloat(p.qte)||1;
+      var existing = stockItems.find(function(s){return s.nom.toLowerCase()===p.nom.toLowerCase();});
+      if(existing){
+        existing.qte = Math.round((existing.qte+qty)*100)/100;
+        if(p.dlc) existing.dlc = p.dlc;
+        if(p.lot) existing.lot = p.lot;
+        existing.scans = (existing.scans||0)+1;
+        existing.fourn = fourn;
+      } else {
+        stockItems.unshift({id:Date.now()+Math.random(),nom:p.nom,cat:'Alimentaire',qte:qty,unite:'kg',min:0,fourn:fourn,dlc:p.dlc||'',lot:p.lot||'',scans:1});
+      }
+      stockMouvements.unshift({id:Date.now()+Math.random(),type:'entree',source:'Réception',nom:p.nom,lot:p.lot||'—',qte:qty,unite:'kg',par:session.signe||currentUser||'—',fourn:fourn,date:dateVal,heure:String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'),obs:'Réception '+fourn+(p.lot?' lot '+p.lot:'')});
+    });
+
+    auditEnregistrer('recep','Réception validée',fourn+' — '+prods.length+' produit(s)','Réceptions');
+    saveAll();
+    ov.remove();
+    renderReceptions();
+    showToast('✅ '+prods.length+' produit(s) → Stock mis à jour !','success',3000);
+  }
+
+  renderScanEtiquettes();
 }
+
 
 var recepBLPhoto = null; // stocke la photo BL en base64
 
