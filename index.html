@@ -423,7 +423,7 @@ function saveAll() {
       congesData: congesData,
       iaHistorique: iaHistorique,
       onboardingDone: onboardingDone,
-      auditLog: auditLog.slice(-1000),
+      auditLog: auditLog.slice(-500),
       parametresData: parametresData,
       algPlats: algPlats,
       briefData: briefData,
@@ -433,12 +433,47 @@ function saveAll() {
       scanHistory: scanHistory,
       pointagesData: pointagesData,
       notificationsData: notificationsData,
-      photosData: photosData,
+      photosData: [],  // Ne jamais stocker les photos base64
       fournisseursList: fournisseursList
     };
-    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    var json = JSON.stringify(data);
+    localStorage.setItem(LS_KEY, json);
     showSaveBadge();
-  } catch(e) { console.warn('Save error', e); }
+  } catch(e) {
+    // Quota dépassé — on nettoie et on réessaie
+    if(e && (e.name==='QuotaExceededError' || e.code===22 || e.code===1014)){
+      try {
+        // Alléger : réduire auditLog, stockMouvements, iaHistorique
+        auditLog = auditLog.slice(-100);
+        stockMouvements = stockMouvements.slice(-100);
+        iaHistorique = iaHistorique.slice(-20);
+        scanHistory = scanHistory.slice(-50);
+        var data2 = {
+          usersData:usersData, prodItems:prodItems, dlcItems:dlcItems,
+          recepItems:recepItems, stockItems:stockItems, stockMouvements:stockMouvements,
+          fichesData:fichesData, ventesData:ventesData, caisseData:caisseData,
+          achatsData:achatsData, approData:approData, cartonsData:cartonsData,
+          planningData:planningData, congesData:congesData, pointagesData:pointagesData,
+          pertesData:pertesData, parametresData:parametresData, fournisseursList:fournisseursList,
+          usersData:usersData, tafTasks:tafTasks, frigosData:frigosData,
+          auditLog:auditLog, iaHistorique:iaHistorique, scanHistory:scanHistory,
+          algPlats:algPlats, briefData:briefData, chkGroupes:chkGroupes,
+          chkHistorique:chkHistorique, echangesData:echangesData, infoData:infoData,
+          onboardingDone:onboardingDone, notificationsData:notificationsData,
+          photosData:[], tempReleves:tempReleves
+        };
+        localStorage.setItem(LS_KEY, JSON.stringify(data2));
+        showSaveBadge();
+        console.warn('SaveAll: quota allégé OK');
+      } catch(e2){
+        showToast('⚠️ Stockage plein — certaines données non sauvegardées','error',5000);
+        console.error('SaveAll: quota fatal', e2);
+      }
+    } else {
+      showToast('⚠️ Erreur sauvegarde: '+( e&&e.message||e),'error',4000);
+      console.error('SaveAll error:', e);
+    }
+  }
 }
 
 function showSaveBadge() {
@@ -7081,73 +7116,6 @@ function iaBuildContext(){
   return lines.join("\n");
 }
 
-function iaEnvoyer(question){
-  if(!question||!question.trim()) return;
-  var q=question.trim();
-  var inp=document.getElementById('ia-input');
-  if(inp) inp.value='';
-
-  iaHistorique.push({role:'user',content:q});
-
-  // Contexte données restaurant enrichi
-  var dlcAlertes=stockItems.filter(function(s){
-    if(!s.dlc)return false;
-    var p=s.dlc.split('/');if(p.length<2)return false;
-    var y=p.length===3?(parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2])):new Date().getFullYear();
-    var d=new Date(y,parseInt(p[1])-1,parseInt(p[0]));
-    return Math.round((d-new Date())/86400000)<=7;
-  }).map(function(s){return {nom:s.nom,dlc:s.dlc,qte:s.qte,unite:s.unite};});
-
-  var stockRuptures=stockItems.filter(function(s){return s.qte===0;}).map(function(s){return s.nom;});
-  var stockFaible=stockItems.filter(function(s){return s.qte>0&&s.qte<=s.min;}).map(function(s){return {nom:s.nom,qte:s.qte,min:s.min,unite:s.unite};});
-  var frigosNonFaits=frigosData.filter(function(f){return !f.fait;}).map(function(f){return f.nom;});
-  var frigosHorsNorme=frigosData.filter(function(f){return f.fait&&f.val!==null&&(f.val<f.smin||f.val>f.lim);}).map(function(f){return {nom:f.nom,val:f.val,lim:f.lim};});
-  var sortiesToday=stockSorties.filter(function(s){return s.date===new Date().toISOString().split('T')[0];});
-
-  var contexte='Tu es l\'assistant de RestoPro pour le restaurant "'+
-    (currentResto==="resto2"?"Chez Anne-So":"Chez Johnny")+'". Reponds TOUJOURS en francais, de facon concise, directe et utile.\n\n'+
-    'STOCK COMPLET ('+stockItems.length+' articles):\n'+JSON.stringify(stockItems.map(function(s){return {nom:s.nom,qte:s.qte,unite:s.unite,min:s.min,cat:s.cat};}))+'.\n\n'+
-    'DLC ALERTES (<=7j): '+JSON.stringify(dlcAlertes)+'.\n'+
-    'RUPTURES: '+JSON.stringify(stockRuptures)+'.\n'+
-    'STOCK FAIBLE: '+JSON.stringify(stockFaible)+'.\n'+
-    'FRIGOS NON CONTROLES: '+JSON.stringify(frigosNonFaits)+'.\n'+
-    'FRIGOS HORS NORME: '+JSON.stringify(frigosHorsNorme)+'.\n'+
-    'TEMPERATURES: '+JSON.stringify(frigosData.map(function(f){return {nom:f.nom,val:f.val,fait:f.fait,signe:f.signe};}))+'.\n'+
-    'SORTIES DU JOUR: '+JSON.stringify(sortiesToday.slice(0,10))+'.\n'+
-    'PRODUCTIONS: '+JSON.stringify((prodItems||[]).slice(0,10).map(function(p){return {nom:p.nom,qte:p.qte,dlc:p.dlc,par:p.par};}))+'.\n'+
-    'EQUIPE: '+JSON.stringify((usersData||[]).filter(function(u){return u.actif;}).map(function(u){return {nom:u.nom,role:u.role};}))+'.\n'+
-    'FICHES TECHNIQUES: '+JSON.stringify(fichesData.map(function(f){return {nom:f.nom,cat:f.cat,portions:f.portions};}))+'.\n\n'+
-    'Si on demande une commande fournisseur, liste les ruptures + stocks faibles avec quantites a commander.\n'+
-    'Si on demande les produits qui expirent, donne les DLC alertes avec le nombre de jours.\n'+
-    'Si on demande les temperatures, donne l\'etat de chaque frigo.\n'+
-    'Reponds de facon concise et actionnable.';
-
-  // Ajouter bulle "en cours"
-  iaHistorique.push({role:'assistant',content:'⏳ Reflexion en cours...'});
-  renderIA();
-
-  fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-6',
-      max_tokens:500,
-      system:contexte,
-      messages:[{role:'user',content:q}]
-    })
-  })
-  .then(function(r){return r.json();})
-  .then(function(data){
-    var rep=data.content&&data.content[0]?data.content[0].text:'Desolee, je n\'ai pas pu repondre.';
-    // Remplacer bulle "en cours"
-    iaHistorique[iaHistorique.length-1]={role:'assistant',content:rep};
-    renderIA();
-  })
-  .catch(function(){
-    iaHistorique[iaHistorique.length-1]={role:'assistant',content:'Erreur de connexion. Verifiez votre connexion internet.'};
-    renderIA();
-  });
-}
 
 // ════════════════
 // PLANNING / CONGES
