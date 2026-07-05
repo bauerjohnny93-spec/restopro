@@ -2,7 +2,35 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-  <link rel="manifest" href="data:application/json,{%22name%22:%22RestoPro%22,%22short_name%22:%22RestoPro%22,%22display%22:%22standalone%22,%22background_color%22:%22%23b8dca0%22,%22theme_color%22:%22%231B6FE8%22}">
+  <link rel="manifest" href="data:application/json,{%22name%22:%22RestoPro%22,%22short_name%22:%22RestoPro%22,%22display%22:%22standalone%22,%22start_url%22:%22.%2F%22,%22background_color%22:%22%23b8dca0%22,%22theme_color%22:%22%231B6FE8%22,%22scope%22:%22.%2F%22}">
+  <script>
+  // Service Worker pour persistence PWA
+  if('serviceWorker' in navigator){
+    var swCode = `
+      const CACHE = 'restopro-v1';
+      self.addEventListener('install', e => { self.skipWaiting(); });
+      self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
+      self.addEventListener('fetch', e => {
+        // Ne pas intercepter les appels API
+        if(e.request.url.includes('anthropic.com')) return;
+        e.respondWith(
+          caches.open(CACHE).then(cache =>
+            cache.match(e.request).then(cached => {
+              var fresh = fetch(e.request).then(res => {
+                if(res.ok) cache.put(e.request, res.clone());
+                return res;
+              }).catch(() => cached);
+              return cached || fresh;
+            })
+          )
+        );
+      });
+    `;
+    var blob = new Blob([swCode], {type:'application/javascript'});
+    var swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(function(){});
+  }
+  </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
