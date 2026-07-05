@@ -307,10 +307,10 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
       <div style="font-size:14px;color:#888">Pour quel restaurant travailles-tu aujourd'hui ?</div>
     </div>
     <button onclick="choisirResto('resto1')" style="width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:16px;padding:18px;font-size:17px;font-weight:700;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
-      <span style="font-size:24px">🍽️</span> Chez Johnny
+      <span style="font-size:24px">🍽️</span> Resto 1
     </button>
     <button onclick="choisirResto('resto2')" style="width:100%;background:#f0fae0;color:#1B6FE8;border:2px solid #1B6FE8;border-radius:16px;padding:18px;font-size:17px;font-weight:700;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
-      <span style="font-size:24px">🍽️</span> Chez Anne-So
+      <span style="font-size:24px">🍽️</span> Resto 2
     </button>
     <button onclick="choisirResto('tous')" style="width:100%;background:none;color:#888;border:1.5px solid #dde8c8;border-radius:16px;padding:14px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
       <span style="font-size:18px">🏠</span> Les deux (Administration)
@@ -530,6 +530,9 @@ function loadAll() {
     if (data.onboardingDone)    onboardingDone    = data.onboardingDone;
     if (data.fournisseursList)  fournisseursList  = data.fournisseursList;
     if (data.parametresData)    parametresData    = Object.assign({}, parametresDefaut, data.parametresData);
+    // Forcer les noms des restaurants
+    parametresData.nomResto1 = 'Resto 1';
+    parametresData.nomResto2 = 'Resto 2';
   } catch(e) { console.warn('Load error', e); }
 }
 
@@ -617,7 +620,7 @@ function choisirRestoAvecUser(foundUser, resto){
   av.style.flexDirection = 'column';
   currentRole = foundUser.role || 'Collaborateur';
   document.getElementById('app-name').textContent = foundUser.name;
-  var restoLabel = resto==='resto1'?' · Chez Johnny':resto==='resto2'?' · Chez Anne-So':'';
+  var restoLabel = resto==='resto1'?' · Resto 1':resto==='resto2'?' · Resto 2':'';
   document.getElementById('app-role').textContent = foundUser.role + restoLabel;
   filterModulesByRole(currentRole);
   setTimeout(checkTempAlerte, 300);
@@ -2849,8 +2852,8 @@ function tempExportPDF(){
   var mois=["janvier","fevrier","mars","avril","mai","juin","juillet","aout","septembre","octobre","novembre","decembre"];
   var jours=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
   var dateGen=now.getDate()+" "+mois[now.getMonth()]+" "+now.getFullYear();
-  var resto=currentResto==="resto2"?"Chez Anne-So":"Chez Johnny";
-  var adresse=currentResto==="resto2"?"Restaurant Chez Anne-So":"Restaurant Chez Johnny";
+  var resto=currentResto==="resto2"?"Resto 2":"Resto 1";
+  var adresse=currentResto==="resto2"?"Restaurant Resto 2":"Restaurant Resto 1";
 
   // ── Page de garde ──
   var pageGarde="<div class='page'><div style='text-align:center;padding:60px 40px'>"+
@@ -3612,7 +3615,7 @@ function recepRenderSessions(el){
   var f1=document.createElement('div');
   f1.style.cssText='display:flex;gap:6px;align-items:center;flex-wrap:wrap';
   f1.innerHTML='<span style="font-size:11px;font-weight:700;color:#888">Etablissement :</span>';
-  [{v:'tous',l:'Tous'},{v:'resto1',l:'Chez Johnny'},{v:'resto2',l:'Chez Anne-So'}].forEach(function(r){
+  [{v:'tous',l:'Tous'},{v:'resto1',l:'Resto 1'},{v:'resto2',l:'Resto 2'}].forEach(function(r){
     var active=r.v===recepFiltreResto;
     var b=document.createElement('button');
     b.style.cssText='padding:5px 12px;font-size:11px;font-weight:700;background:'+(active?'#1B6FE8':'#fff')+';color:'+(active?'#fff':'#555')+';border:1.5px solid '+(active?'#1B6FE8':'#dde8c8')+';border-radius:20px;cursor:pointer;white-space:nowrap';
@@ -3701,7 +3704,7 @@ function recepRenderSessions(el){
   var statutLabel={'validee':'Validee','non_rappr':'Non rapprochee','alerte':'Alerte','critique':'Critique'};
   var statutIco={'validee':'&#9989;','non_rappr':'','alerte':'&#9888;&#65039;','critique':'&#128308;'};
 
-  var restoLabel={'resto1':'Chez Johnny','resto2':'Chez Anne-So','tous':'Tous'};
+  var restoLabel={'resto1':'Resto 1','resto2':'Resto 2','tous':'Tous'};
 
   filtered.forEach(function(r,i){
     var row=document.createElement('div');
@@ -4920,7 +4923,7 @@ function stockRenderRattachement(el){
   // Filtres resto
   var filtreDiv=document.createElement('div');
   filtreDiv.style.cssText='background:#f0fae0;padding:8px 12px;border-bottom:1px solid #dde8c8;display:flex;gap:6px;flex-shrink:0';
-  [{v:'tous',l:'Tous etablissements'},{v:'resto1',l:'Chez Johnny'},{v:'resto2',l:'Chez Anne-So'}].forEach(function(r,i){
+  [{v:'tous',l:'Tous etablissements'},{v:'resto1',l:'Resto 1'},{v:'resto2',l:'Resto 2'}].forEach(function(r,i){
     var b=document.createElement('button');
     b.style.cssText='padding:6px 12px;font-size:11px;font-weight:700;background:'+(i===0?'#1B6FE8':'#fff')+';color:'+(i===0?'#fff':'#555')+';border:1.5px solid '+(i===0?'#1B6FE8':'#dde8c8')+';border-radius:20px;cursor:pointer;white-space:nowrap';
     b.textContent=r.l;
@@ -5375,7 +5378,7 @@ function stockRenderEtat(el){
   });
 
   // Restos
-  [{v:'tous',l:'Tous'},{v:'resto1',l:'Chez Johnny'},{v:'resto2',l:'Chez Anne-So'}].forEach(function(r){
+  [{v:'tous',l:'Tous'},{v:'resto1',l:'Resto 1'},{v:'resto2',l:'Resto 2'}].forEach(function(r){
     var b=document.createElement('button');
     var active=r.v===stockEtatResto;
     b.style.cssText='padding:6px 12px;font-size:12px;font-weight:700;background:'+(active?'#22c55e':'#fff')+';color:'+(active?'#fff':'#555')+';border:1.5px solid '+(active?'#22c55e':'#dde8c8')+';border-radius:20px;cursor:pointer';
@@ -5542,7 +5545,7 @@ function stockRenderSorties(el){
     db.appendChild(prevBtn);db.appendChild(dateLabel);db.appendChild(nextBtn);
   }
   // Filtres resto + CSV
-  [{v:'tous',l:'Tous'},{v:'resto1',l:'Chez Johnny'},{v:'resto2',l:'Chez Anne-So'}].forEach(function(r){
+  [{v:'tous',l:'Tous'},{v:'resto1',l:'Resto 1'},{v:'resto2',l:'Resto 2'}].forEach(function(r){
     var b=document.createElement('button');
     var active=r.v===stockSortiesResto;
     b.style.cssText='padding:6px 10px;font-size:11px;font-weight:700;background:'+(active?'#22c55e':'#fff')+';color:'+(active?'#fff':'#555')+';border:1.5px solid '+(active?'#22c55e':'#dde8c8')+';border-radius:20px;cursor:pointer;flex-shrink:0';
@@ -7092,7 +7095,7 @@ function iaBuildContext(){
   var venteMois=(ventesData||[]).filter(function(v){return v.date&&v.date.startsWith(monthKey);});
   var caMois=venteMois.reduce(function(s,v){return s+(v.midi?v.midi.ca:0)+(v.soir?v.soir.ca:0);},0);
   var cvMois=venteMois.reduce(function(s,v){return s+(v.midi?v.midi.couverts:0)+(v.soir?v.soir.couverts:0);},0);
-  var nomResto=currentResto==='resto2'?'Chez Anne-So':'Chez Johnny';
+  var nomResto=currentResto==='resto2'?'Resto 2':'Resto 1';
   var heureStr=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
 
   var stockRuptStr = stockRuptures.length > 0 ? " (" + stockRuptures.slice(0,3).map(function(s){return s.nom;}).join(', ') + ")" : "";
@@ -8534,7 +8537,7 @@ function exportHACCPPdf(){
     '@media print{.no-print{display:none}}</style></head><body>'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
       '<div><h1>🌡️ Fiche HACCP — Relevés de températures</h1>'+
-        '<p><strong>Établissement :</strong> '+(currentResto==='resto1'?'Chez Johnny':'Chez Anne-So')+'</p>'+
+        '<p><strong>Établissement :</strong> '+(currentResto==='resto1'?'Resto 1':'Resto 2')+'</p>'+
         '<p><strong>Date :</strong> '+dateStr+'</p>'+
         '<p><strong>Heure :</strong> '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+'</p>'+
       '</div>'+
@@ -9963,7 +9966,7 @@ function renderMultisite(){
   var el=mc(); el.innerHTML=''; el.style.background='#f2f2f7';
   var hdr=document.createElement('div');
   hdr.style.cssText='background:linear-gradient(135deg,#1B6FE8,#9b59b6);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));flex-shrink:0';
-  hdr.innerHTML='<div style="font-size:17px;font-weight:700;color:#fff">🌍 Multi-sites</div><div style="font-size:12px;color:rgba(255,255,255,.8)">Chez Johnny ⇄ Chez Anne-So</div>';
+  hdr.innerHTML='<div style="font-size:17px;font-weight:700;color:#fff">🌍 Multi-sites</div><div style="font-size:12px;color:rgba(255,255,255,.8)">Resto 1 ⇄ Resto 2</div>';
   el.appendChild(hdr);
   var tabs=document.createElement('div');
   tabs.style.cssText='background:#f0fae0;display:flex;border-bottom:2px solid #dde8c8;flex-shrink:0';
@@ -9985,9 +9988,9 @@ function renderMultisite(){
   var ca1=(ventesData||[]).filter(function(v){return v.date&&v.date.startsWith(monthKey);}).reduce(function(s,v){return s+(v.midi?v.midi.ca:0)+(v.soir?v.soir.ca:0);},0);
   var ca2=autreData?(autreData.ventesData||[]).filter(function(v){return v.date&&v.date.startsWith(monthKey);}).reduce(function(s,v){return s+(v.midi?v.midi.ca:0)+(v.soir?v.soir.ca:0);},0):0;
   if(multisiteTab==='comparaison'){
-    if(!autreData){var info=document.createElement('div');info.style.cssText='background:#fff8e1;border-left:4px solid #f59e0b;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#d97706;line-height:1.6';info.innerHTML='<strong>💡 Pour comparer :</strong><br>Exportez les données de Chez Anne-So (Admin → Système → Exporter) puis importez-les ici.<br><br><button onclick="multisiteImporterAutre()" style="background:#f59e0b;color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">📥 Importer Chez Anne-So</button>';wrap.appendChild(info);}
+    if(!autreData){var info=document.createElement('div');info.style.cssText='background:#fff8e1;border-left:4px solid #f59e0b;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#d97706;line-height:1.6';info.innerHTML='<strong>💡 Pour comparer :</strong><br>Exportez les données de Resto 2 (Admin → Système → Exporter) puis importez-les ici.<br><br><button onclick="multisiteImporterAutre()" style="background:#f59e0b;color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">📥 Importer Resto 2</button>';wrap.appendChild(info);}
     var grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px';
-    [{label:'Chez Johnny',val:ca1>0?ca1.toFixed(0)+'€':'—',col:'#1B6FE8',bg:'#e8f0ff'},{label:'Chez Anne-So',val:ca2>0?ca2.toFixed(0)+'€':'—',col:'#9b59b6',bg:'#f3e8ff'},
+    [{label:'Resto 1',val:ca1>0?ca1.toFixed(0)+'€':'—',col:'#1B6FE8',bg:'#e8f0ff'},{label:'Resto 2',val:ca2>0?ca2.toFixed(0)+'€':'—',col:'#9b59b6',bg:'#f3e8ff'},
      {label:'Stock CJ',val:stockItems.length,col:'#e67e22',bg:'#fff8e1'},{label:'Stock CAS',val:autreData?(autreData.stockItems||[]).length:0,col:'#9b59b6',bg:'#f3e8ff'}
     ].forEach(function(k){var d=document.createElement('div');d.style.cssText='background:'+k.bg+';border-radius:12px;padding:12px;text-align:center';d.innerHTML='<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:4px">'+k.label+'</div><div style="font-size:22px;font-weight:800;color:'+k.col+'">'+k.val+'</div>';grid.appendChild(d);});
     wrap.appendChild(grid);
@@ -10016,7 +10019,7 @@ function renderMultisite(){
     var g2=document.createElement('div');g2.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px';
     [{val:caT>0?caT.toFixed(0)+'€':'—',label:'CA GROUPE',col:'#1B6FE8',bg:'#e8f0ff'},{val:stockItems.filter(function(s){return s.qte===0;}).length+(autreData?(autreData.stockItems||[]).filter(function(s){return s.qte===0;}).length:0),label:'RUPTURES',col:'#e53935',bg:'#ffebee'}].forEach(function(k){var d=document.createElement('div');d.style.cssText='background:'+k.bg+';border-radius:14px;padding:14px;text-align:center';d.innerHTML='<div style="font-size:22px;font-weight:800;color:'+k.col+'">'+k.val+'</div><div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;margin-top:3px">'+k.label+'</div>';g2.appendChild(d);});
     wrap.appendChild(g2);
-    if(caT>0){var p1=Math.round(ca1/caT*100);var rb=document.createElement('div');rb.style.cssText='background:#f0fae0;border-radius:14px;padding:14px;margin-bottom:14px';rb.innerHTML='<div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:10px">RÉPARTITION CA</div><div style="height:28px;border-radius:14px;overflow:hidden;display:flex"><div style="width:'+p1+'%;background:#1B6FE8;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">'+p1+'%</div><div style="flex:1;background:#9b59b6;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">'+(100-p1)+'%</div></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:8px"><span><span style="color:#1B6FE8">■</span> Chez Johnny: '+ca1.toFixed(0)+'€</span><span><span style="color:#9b59b6">■</span> Chez Anne-So: '+ca2.toFixed(0)+'€</span></div>';wrap.appendChild(rb);}
+    if(caT>0){var p1=Math.round(ca1/caT*100);var rb=document.createElement('div');rb.style.cssText='background:#f0fae0;border-radius:14px;padding:14px;margin-bottom:14px';rb.innerHTML='<div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:10px">RÉPARTITION CA</div><div style="height:28px;border-radius:14px;overflow:hidden;display:flex"><div style="width:'+p1+'%;background:#1B6FE8;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">'+p1+'%</div><div style="flex:1;background:#9b59b6;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">'+(100-p1)+'%</div></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:8px"><span><span style="color:#1B6FE8">■</span> Resto 1: '+ca1.toFixed(0)+'€</span><span><span style="color:#9b59b6">■</span> Resto 2: '+ca2.toFixed(0)+'€</span></div>';wrap.appendChild(rb);}
   }
   el.appendChild(wrap);removeFab();
 }
@@ -10236,7 +10239,7 @@ function renderDashboard(){
   hdr.style.cssText='background:linear-gradient(135deg,#1B6FE8 0%,#0f4bbf 100%);padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));flex-shrink:0';
   hdr.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start"><div>'+
     '<div style="font-size:13px;color:rgba(255,255,255,.7)">'+joursNoms[now.getDay()]+' '+now.getDate()+' '+moisNoms[now.getMonth()]+'</div>'+
-    '<div style="font-size:22px;font-weight:800;color:#fff">'+(currentResto==='resto2'?'Chez Anne-So':'Chez Johnny')+'</div>'+
+    '<div style="font-size:22px;font-weight:800;color:#fff">'+(currentResto==='resto2'?'Resto 2':'Resto 1')+'</div>'+
     '<div style="font-size:12px;color:rgba(255,255,255,.7)">'+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+'</div>'+
     '</div><div style="font-size:48px">🍽️</div></div>';
   el.appendChild(hdr);
@@ -11239,7 +11242,7 @@ function renderInformation(){
   infoCard.innerHTML='<div style="text-align:center;margin-bottom:16px"><div style="font-size:52px">🍽️</div><div style="font-size:22px;font-weight:800;color:#1B6FE8;margin-top:8px">RestoPro</div><div style="font-size:13px;color:#888;margin-top:4px">Version 3.0 — Systeme d\'exploitation pour restaurant</div></div>'+
     '<div style="font-size:13px;color:#555;line-height:2">'+
       '<div style="padding:6px 0;border-bottom:1px solid #dde8c8;display:flex;justify-content:space-between"><span>Administrateur</span><strong>Johnny Bauer</strong></div>'+
-      '<div style="padding:6px 0;border-bottom:1px solid #dde8c8;display:flex;justify-content:space-between"><span>Restaurants</span><strong>Chez Johnny · Chez Anne-So</strong></div>'+
+      '<div style="padding:6px 0;border-bottom:1px solid #dde8c8;display:flex;justify-content:space-between"><span>Restaurants</span><strong>Resto 1 · Resto 2</strong></div>'+
       '<div style="padding:6px 0;border-bottom:1px solid #dde8c8;display:flex;justify-content:space-between"><span>Stockage</span><strong>Local (localStorage)</strong></div>'+
       '<div style="padding:6px 0;display:flex;justify-content:space-between"><span>Connexion</span><strong>'+(navigator.onLine?'✅ En ligne':'📡 Hors ligne')+'</strong></div>'+
     '</div>';
@@ -11865,7 +11868,7 @@ function adminRenderSysteme(parent){
   exportBtn.onclick=function(){
     var data={
       exporteLe:new Date().toISOString(),
-      restaurant:currentResto==='resto2'?'Chez Anne-So':'Chez Johnny',
+      restaurant:currentResto==='resto2'?'Resto 2':'Resto 1',
       tafTasks:tafTasks,prodItems:prodItems,frigosData:frigosData,tempReleves:tempReleves,
       dlcItems:dlcItems,recepItems:recepItems,stockItems:stockItems,stockMouvements:stockMouvements,
       algPlats:algPlats,fichesData:fichesData,ventesData:ventesData,caisseData:caisseData,
