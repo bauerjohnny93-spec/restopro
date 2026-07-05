@@ -88,6 +88,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .alerte-temp-banner{background:#ffebee;border-left:5px solid #c62828;border-radius:12px;padding:12px 14px;margin:10px 12px 0;display:flex;align-items:center;gap:12px;cursor:pointer}
 .alerte-temp-banner.done{background:#e8f5e9;border-left-color:#22c55e}
 @media print{#print-btns{display:none!important}body>*:not(#print-overlay){display:none!important}#print-overlay{position:static!important;padding:0!important}}
+/* Brother QL-820NWBc — étiquettes 62mm */
+@media print{
+  @page{size:62mm auto;margin:0}
+  .brother-label{width:62mm;padding:2mm;box-sizing:border-box;page-break-after:always;font-family:Arial,sans-serif}
+  .brother-label *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .no-print,.btn-print-cancel{display:none!important}
+}
 /* Bannière offline */
 #offline-banner{position:fixed;top:0;left:0;right:0;background:#e53935;color:#fff;text-align:center;padding:8px 14px;font-size:13px;font-weight:700;z-index:9999;display:none;padding-top:calc(8px + env(safe-area-inset-top,0px));align-items:center;justify-content:center;gap:8px}
 #offline-banner.show{display:flex}
@@ -404,8 +411,6 @@ function saveAll() {
       stockMouvements: stockMouvements.slice(-500),
       echangesData: echangesData,
       pertesData: pertesData,
-      dlcItems: dlcItems,
-      recepItems: recepItems,
       fichesData: fichesData,
       ventesData: ventesData,
       caisseData: caisseData,
@@ -419,27 +424,17 @@ function saveAll() {
       iaHistorique: iaHistorique,
       onboardingDone: onboardingDone,
       auditLog: auditLog.slice(-1000),
-      parametresData: parametresData, // garder les 500 derniers
+      parametresData: parametresData,
       algPlats: algPlats,
-      fichesData: fichesData,
-      ventesData: ventesData,
-      caisseData: caisseData,
-      achatsData: achatsData,
-      produitsVendus: produitsVendus,
-      approData: approData,
-      cartonsData: cartonsData,
-      infoData: infoData,
       briefData: briefData,
       briefHistorique: briefHistorique,
       chkGroupes: chkGroupes,
       chkHistorique: chkHistorique,
       scanHistory: scanHistory,
       pointagesData: pointagesData,
-      planningData: planningData,
-      congesData: congesData,
       notificationsData: notificationsData,
       photosData: photosData,
-      iaHistorique: iaHistorique
+      fournisseursList: fournisseursList
     };
     localStorage.setItem(LS_KEY, JSON.stringify(data));
     showSaveBadge();
@@ -462,50 +457,41 @@ function loadAll() {
     var raw = localStorage.getItem(LS_KEY);
     if (!raw) return;
     var data = JSON.parse(raw);
-    if (data.usersData)       usersData       = data.usersData;
-    if (data.tafTasks)        tafTasks        = data.tafTasks.map(function(t){ t.timer=null; t.start=null; return t; });
-    if (data.prodItems)       prodItems       = data.prodItems;
-    if (data.frigosData)      frigosData      = data.frigosData;
-    if (data.dlcItems)        dlcItems        = data.dlcItems;
-    if (data.recepItems)      recepItems      = data.recepItems;
-    if (data.stockItems)      stockItems      = data.stockItems;
-    if (data.algPlats)        algPlats        = data.algPlats;
-    if (data.fichesData)      fichesData      = data.fichesData;
-    if (data.ventesData)      ventesData      = data.ventesData;
-    if (data.caisseData)      caisseData      = data.caisseData;
-    if (data.achatsData)      achatsData      = data.achatsData;
-    if (data.produitsVendus)  produitsVendus  = data.produitsVendus;
-    if (data.approData)       approData       = data.approData;
-    if (data.cartonsData)     cartonsData     = data.cartonsData;
-    if (data.infoData)        infoData        = data.infoData;
-    if (data.briefData)       briefData       = data.briefData;
-    if (data.briefHistorique) briefHistorique = data.briefHistorique;
-    if (data.chkGroupes)      chkGroupes      = data.chkGroupes;
-    if (data.chkHistorique)   chkHistorique   = data.chkHistorique;
-    if (data.scanHistory)     scanHistory     = data.scanHistory;
-    if (data.pointagesData)   pointagesData   = data.pointagesData;
-    if (data.planningData)    planningData    = data.planningData;
-    if (data.congesData)      congesData      = data.congesData;
+    if (data.usersData)         usersData         = data.usersData;
+    if (data.tafTasks)          tafTasks          = data.tafTasks.map(function(t){ t.timer=null; t.start=null; return t; });
+    if (data.prodItems)         prodItems         = data.prodItems;
+    if (data.frigosData)        frigosData        = data.frigosData;
+    if (data.tempReleves)       tempReleves       = data.tempReleves;
+    if (data.dlcItems)          dlcItems          = data.dlcItems;
+    if (data.recepItems)        recepItems        = data.recepItems;
+    if (data.stockItems)        stockItems        = data.stockItems;
+    if (data.stockMouvements)   stockMouvements   = data.stockMouvements;
+    if (data.echangesData)      echangesData      = data.echangesData;
+    if (data.pertesData)        pertesData        = data.pertesData;
+    if (data.algPlats)          algPlats          = data.algPlats;
+    if (data.fichesData)        fichesData        = data.fichesData;
+    if (data.ventesData)        ventesData        = data.ventesData;
+    if (data.caisseData)        caisseData        = data.caisseData;
+    if (data.achatsData)        achatsData        = data.achatsData;
+    if (data.produitsVendus)    produitsVendus    = data.produitsVendus;
+    if (data.approData)         approData         = data.approData;
+    if (data.cartonsData)       cartonsData       = data.cartonsData;
+    if (data.infoData)          infoData          = data.infoData;
+    if (data.briefData)         briefData         = data.briefData;
+    if (data.briefHistorique)   briefHistorique   = data.briefHistorique;
+    if (data.chkGroupes)        chkGroupes        = data.chkGroupes;
+    if (data.chkHistorique)     chkHistorique     = data.chkHistorique;
+    if (data.scanHistory)       scanHistory       = data.scanHistory;
+    if (data.pointagesData)     pointagesData     = data.pointagesData;
+    if (data.planningData)      planningData      = data.planningData;
+    if (data.congesData)        congesData        = data.congesData;
     if (data.notificationsData) notificationsData = data.notificationsData;
-    if (data.photosData)       photosData       = data.photosData;
-    if (data.stockMouvements)  stockMouvements  = data.stockMouvements;
-    if (data.pertesData)       pertesData       = data.pertesData;
-    if (data.dlcItems)         dlcItems         = data.dlcItems;
-    if (data.recepItems)       recepItems       = data.recepItems;
-    if (data.fichesData)       fichesData       = data.fichesData;
-    if (data.ventesData)       ventesData       = data.ventesData;
-    if (data.caisseData)       caisseData       = data.caisseData;
-    if (data.achatsData)       achatsData       = data.achatsData;
-    if (data.produitsVendus)   produitsVendus   = data.produitsVendus;
-    if (data.approData)        approData        = data.approData;
-    if (data.cartonsData)      cartonsData      = data.cartonsData;
-    if (data.infoData)         infoData         = data.infoData;
-    if (data.planningData)     planningData     = data.planningData;
-    if (data.congesData)       congesData       = data.congesData;
-    if (data.auditLog)         auditLog         = data.auditLog;
-    if (data.echangesData)     echangesData     = data.echangesData;
-    if (data.parametresData)   parametresData   = Object.assign({}, parametresDefaut, data.parametresData);
-    if (data.iaHistorique)    iaHistorique    = data.iaHistorique;
+    if (data.photosData)        photosData        = data.photosData;
+    if (data.auditLog)          auditLog          = data.auditLog;
+    if (data.iaHistorique)      iaHistorique      = data.iaHistorique;
+    if (data.onboardingDone)    onboardingDone    = data.onboardingDone;
+    if (data.fournisseursList)  fournisseursList  = data.fournisseursList;
+    if (data.parametresData)    parametresData    = Object.assign({}, parametresDefaut, data.parametresData);
   } catch(e) { console.warn('Load error', e); }
 }
 
@@ -543,7 +529,7 @@ function kErase() {
 function kLogin() {
   var foundUser = null;
   for (var i = 0; i < usersData.length; i++) {
-    if (usersData[i].pin === pin && usersData[i].actif) {
+    if (String(usersData[i].pin) === String(pin) && usersData[i].actif) {
       foundUser = {name: usersData[i].nom, role: usersData[i].role};
       break;
     }
@@ -558,7 +544,7 @@ function kLogin() {
   }
   currentUser = foundUser.name;
   // Vérifier si l'user a un resto fixe assigné
-  var userObj = usersData.find(function(u){ return u.pin === pin; });
+  var userObj = usersData.find(function(u){ return String(u.pin) === String(pin); });
   var restoFixe = userObj && userObj.resto && userObj.resto !== '' && userObj.resto !== 'tous' ? userObj.resto : null;
 
   document.getElementById('login-view').style.display = 'none';
@@ -758,16 +744,68 @@ function removeFab() {
   if (f) f.remove();
 }
 
-// ── Helper API Anthropic ──
+// ── Helper API Anthropic — résistant WiFi + 4G/5G ──
 function anthropicFetch(body){
+  return anthropicCall(body);
+}
+
+function anthropicCall(body, maxRetries){
+  maxRetries = maxRetries !== undefined ? maxRetries : 4;
   var apiKey = (parametresData && parametresData.anthropicApiKey) || '';
-  var headers = (function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};if(parametresData&&parametresData.anthropicApiKey)h["x-api-key"]=parametresData.anthropicApiKey;return h;})();
+  var headers = {
+    "Content-Type": "application/json",
+    "anthropic-dangerous-direct-browser-access": "true"
+  };
   if(apiKey) headers["x-api-key"] = apiKey;
-  return fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",
-    headers: headers,
-    body: JSON.stringify(body)
-  });
+
+  // Timeouts progressifs selon la tentative (WiFi lent → 4G → 5G)
+  var timeouts = [30000, 45000, 60000, 60000];
+
+  function tryOnce(attempt){
+    var timeout = timeouts[Math.min(attempt-1, timeouts.length-1)];
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timeoutId = controller ? setTimeout(function(){
+      controller.abort();
+    }, timeout) : null;
+
+    var fetchOpts = {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify(body),
+      // Pas de cache — important sur les réseaux captifs WiFi
+      cache: "no-store",
+      mode: "cors"
+    };
+    if(controller) fetchOpts.signal = controller.signal;
+
+    return fetch("https://api.anthropic.com/v1/messages", fetchOpts)
+      .then(function(r){
+        if(timeoutId) clearTimeout(timeoutId);
+        if(!r.ok && r.status === 0){
+          // Status 0 = bloqué par réseau/CORS
+          throw new Error("Network blocked (status 0)");
+        }
+        return r.json();
+      })
+      .catch(function(err){
+        if(timeoutId) clearTimeout(timeoutId);
+        var isAbort = err && err.name === 'AbortError';
+        var isNetwork = err && (err.message||'').indexOf('fetch') >= 0;
+
+        if(attempt < maxRetries){
+          // Backoff exponentiel : 1s, 2s, 4s entre les tentatives
+          var delay = Math.pow(2, attempt-1) * 1000;
+          return new Promise(function(resolve, reject){
+            setTimeout(function(){
+              tryOnce(attempt + 1).then(resolve).catch(reject);
+            }, delay);
+          });
+        }
+        throw err;
+      });
+  }
+
+  return tryOnce(1);
 }
 
 
@@ -1451,11 +1489,119 @@ function prodSupprimer(id){
 
 function prodRefresh(){renderProd();}
 
-function printEtiquette(id){
-  var p=prodItems.find(function(x){return x.id===id;});
-  if(!p){showToast('Impression etiquette...');return;}
-  showToast('🖨️ Etiquette : '+p.nom+' · '+p.lot);
+// ════════════════════════════════
+// IMPRESSION BROTHER QL-820NWBc — 62mm WiFi/AirPrint
+// ════════════════════════════════
+
+function brotherPrint(labelHtml, titre){
+  // Ouvrir une fenêtre d'impression optimisée 62mm Brother QL
+  var w = window.open('', '_blank', 'width=300,height=500');
+  if(!w){ showToast('Autorisez les popups pour imprimer','error'); return; }
+  var resto = (parametresData&&parametresData.nomResto1)||'RestoPro';
+  w.document.write(
+    '<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+    '<title>'+(titre||'Étiquette')+'</title>'+
+    '<style>'+
+      '*{margin:0;padding:0;box-sizing:border-box}'+
+      'body{background:#fff;font-family:Arial,Helvetica,sans-serif}'+
+      '.brother-label{width:62mm;padding:3mm;background:#fff}'+
+      '.print-toolbar{position:fixed;bottom:0;left:0;right:0;background:#1B6FE8;padding:10px;display:flex;gap:8px;justify-content:center;z-index:999}'+
+      '.print-toolbar button{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}'+
+      '.btn-print{background:#fff;color:#1B6FE8}'+
+      '.btn-close{background:rgba(255,255,255,.2);color:#fff}'+
+      '@page{size:62mm auto;margin:0}'+
+      '@media print{.print-toolbar{display:none!important}body{margin:0}'+
+        '.brother-label{width:62mm;padding:2mm}'+
+        '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'+
+    '</style></head><body>'+
+    '<div class="brother-label">'+labelHtml+'</div>'+
+    '<div class="print-toolbar">'+
+      '<button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>'+
+      '<button class="btn-close" onclick="window.close()">✕ Fermer</button>'+
+    '</div>'+
+    '</body></html>'
+  );
+  w.document.close();
+  w.focus();
 }
+
+function brotherLabelHtml(data){
+  // Génère le HTML d'une étiquette 62mm standard
+  // data: {titre, nom, lot, dlc, poids, date, resto, user, extra:[{label,val}]}
+  var now = new Date();
+  var dateStr = data.date || (String(now.getDate()).padStart(2,'0')+'/'+String(now.getMonth()+1).padStart(2,'0')+'/'+now.getFullYear());
+  var resto = data.resto || (parametresData&&parametresData.nomResto1) || 'RestoPro';
+
+  var html =
+    // En-tête restaurant
+    '<div style="background:#1B6FE8;color:#fff;text-align:center;padding:2mm 2mm 1mm;border-radius:2mm 2mm 0 0">'+
+      '<div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.5pt">'+resto+'</div>'+
+      (data.titre?'<div style="font-size:7pt;opacity:.8">'+data.titre+'</div>':'')+
+    '</div>'+
+    // Nom produit
+    '<div style="background:#fff;border:1.5pt solid #1B6FE8;border-top:none;padding:2mm;text-align:center">'+
+      '<div style="font-size:13pt;font-weight:900;color:#1a1a1a;line-height:1.2">'+( data.nom||'—')+'</div>'+
+    '</div>'+
+    // DLC — encadré rouge
+    (data.dlc?
+      '<div style="background:#e53935;color:#fff;text-align:center;padding:2mm;margin-top:1mm;border-radius:1mm">'+
+        '<div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:0.5pt;opacity:.85">À consommer avant le</div>'+
+        '<div style="font-size:16pt;font-weight:900;letter-spacing:0.5pt">'+data.dlc+'</div>'+
+      '</div>'
+    :'')+
+    // Infos
+    '<div style="border:1pt solid #ddd;border-radius:1mm;margin-top:1mm;overflow:hidden">';
+
+  // Lot
+  if(data.lot) html +=
+    '<div style="display:flex;justify-content:space-between;padding:1.5mm 2mm;border-bottom:1pt solid #eee">'+
+      '<span style="font-size:7pt;color:#888;font-weight:700;text-transform:uppercase">Lot</span>'+
+      '<span style="font-size:8pt;font-weight:700;color:#1a1a1a;font-family:monospace">'+data.lot+'</span>'+
+    '</div>';
+
+  // Poids
+  if(data.poids) html +=
+    '<div style="display:flex;justify-content:space-between;padding:1.5mm 2mm;border-bottom:1pt solid #eee">'+
+      '<span style="font-size:7pt;color:#888;font-weight:700;text-transform:uppercase">Poids</span>'+
+      '<span style="font-size:8pt;font-weight:700;color:#1a1a1a">'+data.poids+'</span>'+
+    '</div>';
+
+  // Extra fields
+  if(data.extra) data.extra.forEach(function(e){
+    html +=
+      '<div style="display:flex;justify-content:space-between;padding:1.5mm 2mm;border-bottom:1pt solid #eee">'+
+        '<span style="font-size:7pt;color:#888;font-weight:700;text-transform:uppercase">'+e.label+'</span>'+
+        '<span style="font-size:8pt;font-weight:700;color:#1a1a1a">'+e.val+'</span>'+
+      '</div>';
+  });
+
+  // Date de production + user
+  html +=
+    '<div style="display:flex;justify-content:space-between;padding:1.5mm 2mm">'+
+      '<span style="font-size:7pt;color:#888;font-weight:700;text-transform:uppercase">Produit le</span>'+
+      '<span style="font-size:7pt;font-weight:700;color:#1a1a1a">'+dateStr+(data.user?' · '+data.user:'')+'</span>'+
+    '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function printEtiquette(id){
+  var p = prodItems.find(function(x){ return x.id===id; });
+  if(!p){ showToast('Produit introuvable','error'); return; }
+  var label = brotherLabelHtml({
+    titre: 'Production',
+    nom: p.nom,
+    lot: p.lot,
+    dlc: p.dlc,
+    poids: p.qte ? p.qte+' '+p.unite : null,
+    user: p.par || currentUser,
+    extra: p.obs ? [{label:'Note',val:p.obs}] : []
+  });
+  brotherPrint(label, 'Étiquette — '+p.nom);
+}
+
+
 
 
 
@@ -1611,9 +1757,45 @@ function pointageAction(action){
     session.fin=now;session.etat='fini';session.dernierDebut=null;session.pauseDebut=null;
     var user=currentUser||'Johnny Bauer';
     var ini=user.split(' ').map(function(x){return x[0];}).join('').toUpperCase().slice(0,2);
-    var entry={id:Date.now(),ini:ini,nom:user,poste:'—',heure:pointageFormatHeure(session.debut),fin:pointageFormatHeure(session.fin),travail:pointageFormatDuration(session.travailTotal),pause:pointageFormatDuration(session.pauseTotal),statut:'ok',label:'Present',date:new Date().toISOString().split('T')[0]};
-    var existing=pointagesData.findIndex(function(p){return p.nom===user&&p.date===entry.date;});
+    var today=new Date().toISOString().split('T')[0];
+    var heureDebut=pointageFormatHeure(session.debut);
+    var heureFin=pointageFormatHeure(session.fin);
+    var travailMs=session.travailTotal||0;
+    var travailStr=pointageFormatDuration(travailMs);
+    var pauseStr=pointageFormatDuration(session.pauseTotal||0);
+    var entry={id:Date.now(),ini:ini,nom:user,poste:'—',heure:heureDebut,fin:heureFin,travail:travailStr,pause:pauseStr,statut:'ok',label:'Present',date:today};
+    var existing=pointagesData.findIndex(function(p){return p.nom===user&&p.date===today;});
     if(existing>=0)pointagesData[existing]=entry;else pointagesData.unshift(entry);
+
+    // ── Archivage permanent dans planningData ──
+    // Chaque fin de journée crée/met à jour un enregistrement de présence
+    // consultable par jour, semaine, mois
+    var userObj=(usersData||[]).find(function(u){return u.nom===user;});
+    var heuresDecimal=Math.round(travailMs/3600000*100)/100; // ex: 7.5h
+    var archiveEntry={
+      id:'ptg_'+user.replace(/\s/g,'_')+'_'+today,
+      type:'pointage_archive',
+      userId:userObj?userObj.id:null,
+      nom:user,
+      ini:ini,
+      poste:userObj?userObj.poste||'—':'—',
+      date:today,
+      debut:heureDebut,
+      fin:heureFin,
+      travail:travailStr,
+      pause:pauseStr,
+      heures:heuresDecimal,
+      pauses:session.pauses||[],
+      resto:currentResto||'resto1'
+    };
+    // Remplacer si déjà existant (même jour même user)
+    var archIdx=(planningData||[]).findIndex(function(p){
+      return p.type==='pointage_archive'&&p.nom===user&&p.date===today;
+    });
+    if(archIdx>=0) planningData[archIdx]=archiveEntry;
+    else planningData.unshift(archiveEntry);
+
+    auditEnregistrer('pointages','Journée archivée',user+' '+heureDebut+'→'+heureFin+' ('+travailStr+')','Pointages');
     saveAll();
   }
   pointageSaveSession(session);
@@ -3029,8 +3211,8 @@ function scanInventairePhoto(input){
 
     var prompt="Scanner etiquette alimentaire. JSON pur uniquement: {nom, dlc jj/mm/aaaa, lot, poids, unite, fournisseur}. Champs absents = chaine vide.";
     fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};if(parametresData&&parametresData.anthropicApiKey)h["x-api-key"]=parametresData.anthropicApiKey;return h;})(),
+      method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
+      headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})(),
       body:JSON.stringify({
         model:"claude-sonnet-4-6",
         max_tokens:400,
@@ -3235,8 +3417,8 @@ function scanRapidePhoto(input){
 
     var promptTexte = "Scanner alimentaire expert. JSON pur: {nom, dlc jj/mm/aaaa, lot, poids, unite, temperature, fournisseur, categorie}. Absent = vide.";
     fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};if(parametresData&&parametresData.anthropicApiKey)h["x-api-key"]=parametresData.anthropicApiKey;return h;})(),
+      method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
+      headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})(),
       body:JSON.stringify({
         model:"claude-sonnet-4-6",
         max_tokens:600,
@@ -3266,6 +3448,54 @@ function scanRapidePhoto(input){
 
 // ── Variables globales manquantes ──
 var checkAllAlertsTimer = null;
+
+// ── Sauvegarde à la fermeture et passage en arrière-plan ──
+window.addEventListener('beforeunload', function(){ saveAll(); });
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'hidden') saveAll();
+});
+
+function scanRapideAfficherResultat(info){
+  var resultDiv = document.getElementById('rapide-result');
+  if(!resultDiv) return;
+  if(!info){ resultDiv.innerHTML="<div style='background:#ffebee;border-radius:12px;padding:14px;text-align:center;color:#e53935;font-weight:600'>Lecture impossible. Reprenez la photo.</div>"; return; }
+
+  var dlc = info.dlc||info['dlc jj/mm/aaaa']||'';
+  var nom = info.nom||'Produit scanné';
+  var lot = info.lot||'';
+  var poids = info.poids||'';
+  var unite = info.unite||'kg';
+  var fourn = info.fournisseur||'';
+
+  resultDiv.innerHTML='';
+  var card = document.createElement('div');
+  card.style.cssText='background:#f0fae0;border-radius:14px;padding:14px;margin-top:10px';
+  card.innerHTML=
+    '<div style="font-size:15px;font-weight:800;color:#1B6FE8;margin-bottom:10px">✅ '+nom+'</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">'+
+      (dlc?'<div style="background:#ffebee;border-radius:8px;padding:6px 10px"><div style="color:#e53935;font-weight:700;font-size:9px;text-transform:uppercase">DLC</div><div style="font-weight:700;color:#1a1a1a">'+dlc+'</div></div>':'')+
+      (lot?'<div style="background:#e8f0ff;border-radius:8px;padding:6px 10px"><div style="color:#1B6FE8;font-weight:700;font-size:9px;text-transform:uppercase">LOT</div><div style="font-weight:700;color:#1a1a1a">'+lot+'</div></div>':'')+
+      (poids?'<div style="background:#f0fae0;border-radius:8px;padding:6px 10px"><div style="color:#16a34a;font-weight:700;font-size:9px;text-transform:uppercase">POIDS</div><div style="font-weight:700;color:#1a1a1a">'+poids+' '+unite+'</div></div>':'')+
+      (fourn?'<div style="background:#f0fae0;border-radius:8px;padding:6px 10px"><div style="color:#555;font-weight:700;font-size:9px;text-transform:uppercase">FOURN.</div><div style="font-weight:700;color:#1a1a1a">'+fourn+'</div></div>':'')+
+    '</div>';
+
+  var addBtn = document.createElement('button');
+  addBtn.style.cssText='width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px;box-sizing:border-box';
+  addBtn.innerHTML='+ Ajouter au stock';
+  addBtn.onclick = (function(i,n,d,l,p,u,f){return function(){
+    var existing=stockItems.find(function(s){return s.nom.toLowerCase()===n.toLowerCase();});
+    var qty=parseFloat(p)||1;
+    if(existing){ existing.qte=Math.round((existing.qte+qty)*100)/100; if(d)existing.dlc=d; if(l)existing.lot=l; if(f)existing.fourn=f; existing.scans=(existing.scans||0)+1; }
+    else{ stockItems.unshift({id:Date.now(),nom:n,cat:'Alimentaire',qte:qty,unite:u||'kg',min:0,fourn:f||'',dlc:d||'',lot:l||'',scans:1}); }
+    scanHistory.unshift({id:Date.now(),nom:n,dlc:d,lot:l,poids:p,unite:u,fourn:f,date:new Date().toISOString().split('T')[0],heure:new Date().toTimeString().slice(0,5)});
+    saveAll();
+    showToast('✅ '+n+' ajouté au stock !','success',2000);
+    addBtn.textContent='✓ Ajouté !'; addBtn.style.background='#16a34a'; addBtn.disabled=true;
+  };})(info,nom,dlc,lot,poids,unite,fourn);
+  card.appendChild(addBtn);
+  resultDiv.appendChild(card);
+}
+
 
 function checkAllAlerts(){
   // Alias vers checkAllAlertsFull pour compatibilité
@@ -3656,7 +3886,7 @@ function scanOpenUnitaire(){
     if(parametresData&&parametresData.anthropicApiKey) hdrs["x-api-key"] = parametresData.anthropicApiKey;
 
     fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST", headers:hdrs,
+      method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(), headers:hdrs,
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1500,
         messages:[{role:"user", content:[
@@ -3685,11 +3915,22 @@ function scanOpenUnitaire(){
     })
     .catch(function(err){
       ov.innerHTML = '';
+      var hdrE=document.createElement('div');
+      hdrE.style.cssText='background:#e53935;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));flex-shrink:0';
+      hdrE.innerHTML='<div style="font-size:17px;font-weight:700;color:#fff">Erreur</div>';
+      ov.appendChild(hdrE);
       var errDiv = document.createElement('div');
-      errDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px;text-align:center';
-      errDiv.innerHTML = '<div style="font-size:48px;margin-bottom:16px">❌</div><div style="font-size:15px;font-weight:700;color:#e53935;margin-bottom:8px">Erreur de connexion</div><div style="font-size:13px;color:#888;margin-bottom:20px">Vérifiez votre clé API dans Paramètres → IA / API</div>';
+      errDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:30px;text-align:center';
+      var errMsg = err ? (err.message||String(err)) : 'Erreur inconnue';
+      var apiKey = parametresData&&parametresData.anthropicApiKey;
+      errDiv.innerHTML =
+        '<div style="font-size:48px;margin-bottom:16px">❌</div>'+
+        '<div style="font-size:15px;font-weight:700;color:#e53935;margin-bottom:8px">Erreur appel API</div>'+
+        '<div style="background:#f5f5f5;border-radius:10px;padding:10px 14px;font-size:11px;color:#555;font-family:monospace;margin-bottom:12px;word-break:break-all;max-width:300px">'+errMsg+'</div>'+
+        (!apiKey?'<div style="background:#ffebee;border-radius:10px;padding:10px 14px;font-size:13px;color:#e53935;font-weight:700;margin-bottom:12px">Aucune cle API configuree<br>Parametres → IA / API</div>':
+          '<div style="background:#e8f5e9;border-radius:10px;padding:8px 12px;font-size:12px;color:#16a34a;margin-bottom:12px">Cle API presente</div>');
       var retryBtn = document.createElement('button');
-      retryBtn.style.cssText = 'background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer';
+      retryBtn.style.cssText = 'background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;width:100%;max-width:280px';
       retryBtn.textContent = 'Retour';
       retryBtn.onclick = function(){ renderMain(); };
       errDiv.appendChild(retryBtn);
@@ -4055,10 +4296,9 @@ function recepOpenFicheReception(fourn, dateVal){
         if(iz) iz.innerHTML = '<div style="text-align:center;padding:14px;font-size:13px;color:#1B6FE8;font-weight:700">⚡ Analyse en cours...</div>';
         var b64 = e.target.result.split(',')[1];
         var mime = file.type||'image/jpeg';
-        var hdrs = {"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
-        if(parametresData&&parametresData.anthropicApiKey) hdrs["x-api-key"]=parametresData.anthropicApiKey;
+        var hdrs=(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})();
         fetch("https://api.anthropic.com/v1/messages",{
-          method:"POST", headers:hdrs,
+          method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(), headers:hdrs,
           body:JSON.stringify({
             model:"claude-sonnet-4-6", max_tokens:400,
             messages:[{role:"user",content:[
@@ -6543,13 +6783,15 @@ function dlcVoirEtiquette(d){
   printBtn.style.cssText='flex:1;background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer';
   printBtn.innerHTML='🖨️ Imprimer';
   printBtn.onclick=function(){
-    var w=window.open('','_blank');
-    w.document.write('<html><head><title>Étiquette DLC</title>'+
-      '<style>body{margin:0;display:flex;justify-content:center;padding:20px;font-family:monospace}@media print{button{display:none}}</style>'+
-      '</head><body>'+etiq.outerHTML+'<br><button onclick="window.print()">Imprimer</button></body></html>');
-    w.document.close();
-    w.focus();
-    setTimeout(function(){w.print();},500);
+    var label=brotherLabelHtml({
+      titre:'DLC',
+      nom:d.nom,
+      lot:d.lot&&d.lot!=='—'?d.lot:null,
+      dlc:d.dlc&&d.dlc!=='—'?d.dlc:null,
+      poids:d.poids&&d.poids!=='—'?d.poids:null,
+      user:currentUser
+    });
+    brotherPrint(label,'Étiquette DLC — '+d.nom);
   };
 
   var closeBtn=document.createElement('button');
@@ -6758,8 +7000,8 @@ function iaEnvoyer(question){
   var apiMessages=iaHistorique.slice(-10).map(function(m){return {role:m.role,content:m.content};});
 
   fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",
-    headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};if(parametresData&&parametresData.anthropicApiKey)h["x-api-key"]=parametresData.anthropicApiKey;return h;})(),
+    method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
+    headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})(),
     body:JSON.stringify({
       model:"claude-sonnet-4-6",
       max_tokens:1000,
@@ -6942,7 +7184,7 @@ function renderPlanning(){
 
   var tabsDiv=document.createElement('div');
   tabsDiv.style.cssText='background:#f0fae0;display:flex;border-bottom:2px solid #dde8c8;flex-shrink:0;overflow-x:auto';
-  [{id:'equipe',label:'👥 Équipe'},{id:'semaine',label:'📅 Semaine'},{id:'mois',label:'🗓️ Mois'},{id:'postes',label:'👔 Postes'},{id:'pointages',label:'⏱️ Pointages'},{id:'conges',label:'🌴 Congés'},{id:'absences',label:'❌ Absences'},{id:'echanges',label:'🔄 Échanges'}].forEach(function(t){
+  [{id:'equipe',label:'👥 Équipe'},{id:'semaine',label:'📅 Semaine'},{id:'mois',label:'🗓️ Mois'},{id:'postes',label:'👔 Postes'},{id:'pointages',label:'⏱️ Pointages'},{id:'historique',label:'📊 Historique'},{id:'conges',label:'🌴 Congés'},{id:'absences',label:'❌ Absences'},{id:'echanges',label:'🔄 Échanges'}].forEach(function(t){
     var active=(t.id===planningTab);
     var b=document.createElement('button');
     b.style.cssText='padding:10px 12px;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'#1B6FE8':'#888')+';background:none;border:none;border-bottom:2.5px solid '+(active?'#1B6FE8':'transparent')+';cursor:pointer;white-space:nowrap;flex-shrink:0';
@@ -6962,6 +7204,7 @@ function renderPlanning(){
   else if(planningTab==='conges')   planningRenderConges(el);
   else if(planningTab==='absences') planningRenderAbsences(el);
   else if(planningTab==='pointages') planningRenderPointages(el);
+  else if(planningTab==='historique') planningRenderHistorique(el);
   else                               planningRenderEchanges(el);
 }
 
@@ -6992,7 +7235,7 @@ function planningRenderPointages(el){
     titre.textContent='COMPARATIF PLANNING vs POINTAGES — '+date;
     tableDiv.appendChild(titre);
 
-    var activeUsers=usersData.filter(function(u){return u.actif;});
+    var activeUsers=(usersData||[]).filter(function(u){return u.actif!==false;});
     if(!activeUsers.length){
       tableDiv.innerHTML+='<div style="text-align:center;padding:30px;color:#bbb">Aucun employé actif</div>';
       return;
@@ -7061,6 +7304,133 @@ function planningRenderPointages(el){
   renderPtgTable(today);
 }
 
+
+function planningRenderHistorique(el){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px 80px;flex:1';
+
+  // Récupérer toutes les archives de pointages
+  var archives=(planningData||[]).filter(function(p){return p.type==='pointage_archive';});
+
+  if(!archives.length){
+    wrap.innerHTML='<div style="text-align:center;padding:60px 20px;color:#bbb">'+
+      '<div style="font-size:52px;margin-bottom:12px">📊</div>'+
+      '<div style="font-size:15px;font-weight:600;color:#999">Aucun historique</div>'+
+      '<div style="font-size:13px;color:#bbb;margin-top:8px">Les journées terminées dans Pointages apparaîtront ici</div>'+
+    '</div>';
+    el.appendChild(wrap);return;
+  }
+
+  // Filtres période
+  var now=new Date();
+  var filtreDiv=document.createElement('div');
+  filtreDiv.style.cssText='display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none';
+  var filtre='semaine';
+  var filtres=[{id:'jour',label:"Aujourd'hui"},{id:'semaine',label:'Cette semaine'},{id:'mois',label:'Ce mois'},{id:'tout',label:'Tout'}];
+  filtres.forEach(function(f){
+    var b=document.createElement('button');
+    b.style.cssText='padding:6px 14px;font-size:12px;font-weight:700;background:'+(f.id===filtre?'#1B6FE8':'#f0fae0')+';color:'+(f.id===filtre?'#fff':'#555')+';border:1.5px solid '+(f.id===filtre?'#1B6FE8':'#dde8c8')+';border-radius:20px;cursor:pointer;white-space:nowrap;flex-shrink:0';
+    b.textContent=f.label;
+    b.onclick=(function(fid,btn){return function(){
+      filtre=fid;
+      filtreDiv.querySelectorAll('button').forEach(function(x){x.style.background='#f0fae0';x.style.color='#555';x.style.borderColor='#dde8c8';});
+      btn.style.background='#1B6FE8';btn.style.color='#fff';btn.style.borderColor='#1B6FE8';
+      renderContent();
+    };})(f.id,b);
+    filtreDiv.appendChild(b);
+  });
+  wrap.appendChild(filtreDiv);
+
+  var contentDiv=document.createElement('div');
+  wrap.appendChild(contentDiv);
+
+  function getArchivesFiltrees(){
+    var today=now.toISOString().split('T')[0];
+    var lundiDate=new Date(now);lundiDate.setDate(now.getDate()-((now.getDay()+6)%7));
+    var lundi=lundiDate.toISOString().split('T')[0];
+    var debutMois=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+    return archives.filter(function(a){
+      if(filtre==='jour') return a.date===today;
+      if(filtre==='semaine') return a.date>=lundi&&a.date<=today;
+      if(filtre==='mois') return a.date>=debutMois&&a.date<=today;
+      return true;
+    }).sort(function(a,b){return b.date.localeCompare(a.date);});
+  }
+
+  function renderContent(){
+    contentDiv.innerHTML='';
+    var filtered=getArchivesFiltrees();
+    if(!filtered.length){contentDiv.innerHTML='<div style="text-align:center;padding:30px;color:#bbb;font-size:13px">Aucun pointage sur cette période</div>';return;}
+
+    // KPI de la période
+    var totalH=filtered.reduce(function(s,a){return s+(a.heures||0);},0);
+    var jours=[...new Set(filtered.map(function(a){return a.date;}))].length;
+    var users=[...new Set(filtered.map(function(a){return a.nom;}))];
+
+    var kpiRow=document.createElement('div');
+    kpiRow.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px';
+    [{val:totalH.toFixed(1)+'h',label:'TOTAL',col:'#1B6FE8',bg:'#e8f0ff'},
+     {val:jours,label:'JOURS',col:'#16a34a',bg:'#e8f5e9'},
+     {val:users.length,label:'EMPLOYÉS',col:'#e67e22',bg:'#fff8e1'}
+    ].forEach(function(k){
+      var d=document.createElement('div');
+      d.style.cssText='background:'+k.bg+';border-radius:12px;padding:12px;text-align:center';
+      d.innerHTML='<div style="font-size:20px;font-weight:800;color:'+k.col+'">'+k.val+'</div>'+
+        '<div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase;margin-top:3px">'+k.label+'</div>';
+      kpiRow.appendChild(d);
+    });
+    contentDiv.appendChild(kpiRow);
+
+    // Grouper par employé
+    var byUser={};
+    filtered.forEach(function(a){
+      if(!byUser[a.nom]) byUser[a.nom]={nom:a.nom,ini:a.ini,poste:a.poste,jours:[],totalH:0};
+      byUser[a.nom].jours.push(a);
+      byUser[a.nom].totalH+=a.heures||0;
+    });
+
+    Object.values(byUser).sort(function(a,b){return b.totalH-a.totalH;}).forEach(function(u){
+      var userCard=document.createElement('div');
+      userCard.style.cssText='background:#f0fae0;border-radius:14px;padding:14px;margin-bottom:10px';
+
+      // Header employé
+      var userHdr=document.createElement('div');
+      userHdr.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer';
+      userHdr.innerHTML=
+        '<div style="width:36px;height:36px;border-radius:50%;background:#1B6FE8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0">'+u.ini+'</div>'+
+        '<div style="flex:1"><div style="font-size:14px;font-weight:700;color:#1a1a1a">'+u.nom+'</div>'+
+        '<div style="font-size:11px;color:#888">'+u.poste+' · '+u.jours.length+' jour(s)</div></div>'+
+        '<div style="font-size:18px;font-weight:800;color:#1B6FE8">'+u.totalH.toFixed(1)+'h</div>';
+
+      var detailDiv=document.createElement('div');
+      detailDiv.style.display='none';
+
+      userHdr.onclick=function(){
+        detailDiv.style.display=detailDiv.style.display==='none'?'block':'none';
+      };
+      userCard.appendChild(userHdr);
+
+      // Détail des jours
+      u.jours.forEach(function(j){
+        var jRow=document.createElement('div');
+        jRow.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid #dde8c8;font-size:12px';
+        var d=new Date(j.date+'T12:00:00');
+        var jNoms=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+        jRow.innerHTML=
+          '<span style="color:#555;font-weight:600">'+jNoms[d.getDay()]+' '+d.getDate()+'/'+String(d.getMonth()+1).padStart(2,'0')+'</span>'+
+          '<span style="color:#888">'+j.debut+' → '+j.fin+'</span>'+
+          '<span style="font-weight:700;color:#1B6FE8">'+j.travail+'</span>'+
+          (j.pause&&j.pause!=='00h00m00s'?'<span style="color:#888;font-size:10px">⏸ '+j.pause+'</span>':'');
+        detailDiv.appendChild(jRow);
+      });
+      userCard.appendChild(detailDiv);
+      contentDiv.appendChild(userCard);
+    });
+  }
+
+  renderContent();
+  el.appendChild(wrap);
+}
 
 function planningRenderEquipe(el){
   var wrap=document.createElement('div');
@@ -7777,120 +8147,387 @@ function planningAjouterConfirm(){
   saveAll();renderPlanning();showToast('Shift ajouté !');
 }
 
+function congesCalculerCP(userId, userName){
+  var archives=(planningData||[]).filter(function(p){
+    return p.type==='pointage_archive'&&(p.userId===userId||p.nom===userName);
+  });
+  var moisTravailles={};
+  archives.forEach(function(a){
+    var mois=a.date.substring(0,7);
+    if(!moisTravailles[mois])moisTravailles[mois]=0;
+    moisTravailles[mois]++;
+  });
+  var moisComplets=Object.values(moisTravailles).filter(function(nb){return nb>=10;}).length;
+  var cpAcquis=Math.round(moisComplets*2.5*10)/10;
+  var congesUser=(congesData||[]).filter(function(c){
+    return (c.userId===userId||c.userName===userName)&&c.statut==='confirme'&&c.motif==='Congés payés';
+  });
+  var cpPris=congesUser.reduce(function(s,c){
+    if(!c.dateDebut||!c.dateFin)return s;
+    var d1=new Date(c.dateDebut);var d2=new Date(c.dateFin);
+    var ouvrables=0;
+    for(var d=new Date(d1);d<=d2;d.setDate(d.getDate()+1)){if(d.getDay()!==0&&d.getDay()!==6)ouvrables++;}
+    return s+ouvrables;
+  },0);
+  return {acquis:cpAcquis,pris:cpPris,restants:Math.round((cpAcquis-cpPris)*10)/10,moisComplets:moisComplets};
+}
+
 function planningRenderConges(el){
   var wrap=document.createElement('div');
   wrap.style.cssText='overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px 80px;flex:1';
-  var demandesEnAttente=congesData.filter(function(c){return c.statut==='demande';});
+
+  // Soldes CP par employé
+  var cpTitle=document.createElement('div');
+  cpTitle.style.cssText='font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px';
+  cpTitle.textContent='SOLDES CONGÉS PAYÉS';
+  wrap.appendChild(cpTitle);
+
+  var activeUsers=(usersData||[]).filter(function(u){return u.actif!==false;});
+  activeUsers.forEach(function(u){
+    var cp=congesCalculerCP(u.id,u.nom);
+    var ini=u.nom.split(' ').map(function(x){return x[0];}).join('').toUpperCase().slice(0,2);
+    var cpCard=document.createElement('div');
+    cpCard.style.cssText='background:#f0fae0;border-radius:14px;padding:12px 14px;margin-bottom:8px';
+    cpCard.innerHTML=
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'+
+        '<div style="width:36px;height:36px;border-radius:50%;background:#1B6FE8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0">'+ini+'</div>'+
+        '<div style="flex:1"><div style="font-size:14px;font-weight:700">'+u.nom+'</div>'+
+        '<div style="font-size:11px;color:#888">'+u.poste+' · '+cp.moisComplets+' mois complets</div></div>'+
+        '<div style="text-align:right"><div style="font-size:20px;font-weight:800;color:'+(cp.restants>0?'#16a34a':'#e53935')+'">'+cp.restants+'j</div>'+
+        '<div style="font-size:9px;color:#888;font-weight:700;text-transform:uppercase">Restants</div></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'+
+        '<div style="background:#e8f5e9;border-radius:8px;padding:6px;text-align:center"><div style="font-weight:800;color:#16a34a;font-size:14px">'+cp.acquis+'j</div><div style="color:#888;font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px">Acquis</div></div>'+
+        '<div style="background:#ffebee;border-radius:8px;padding:6px;text-align:center"><div style="font-weight:800;color:#e53935;font-size:14px">'+cp.pris+'j</div><div style="color:#888;font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px">Pris</div></div>'+
+        '<div style="background:'+(cp.restants>=5?'#e8f0ff':'#fff8e1')+';border-radius:8px;padding:6px;text-align:center"><div style="font-weight:800;color:'+(cp.restants>=5?'#1B6FE8':'#e67e22')+';font-size:14px">'+cp.restants+'j</div><div style="color:#888;font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px">Solde</div></div>'+
+      '</div>';
+    wrap.appendChild(cpCard);
+  });
+
+  if(!activeUsers.length){
+    var noEmp=document.createElement('div');
+    noEmp.style.cssText='background:#f5f5f5;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#888;text-align:center';
+    noEmp.textContent='Ajoutez des employés dans Administration';
+    wrap.appendChild(noEmp);
+  }
+
+  // Demandes
+  var sep=document.createElement('div');
+  sep.style.cssText='font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px';
+  sep.textContent='DEMANDES DE CONGÉS';
+  wrap.appendChild(sep);
+
+  var demandesEnAttente=(congesData||[]).filter(function(c){return c.statut==='demande';});
   if(demandesEnAttente.length){
     var alertDiv=document.createElement('div');
-    alertDiv.style.cssText='background:#fff8e1;border-left:4px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#d97706;font-weight:600';
-    alertDiv.textContent='⏳ '+demandesEnAttente.length+' demande(s) en attente de validation';
+    alertDiv.style.cssText='background:#fff8e1;border-left:4px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#d97706;font-weight:600';
+    alertDiv.textContent='⏳ '+demandesEnAttente.length+' demande(s) en attente';
     wrap.appendChild(alertDiv);
   }
-  if(!congesData.length){
-    wrap.innerHTML='<div style="text-align:center;padding:48px 20px;color:#bbb"><div style="font-size:48px;margin-bottom:12px">🌴</div><div style="font-size:15px;font-weight:600;color:#999">Aucune demande de congé</div></div>';
-    el.appendChild(wrap);addFab(function(){planningDemanderConge();});return;
+
+  if(!(congesData&&congesData.length)){
+    var empty=document.createElement('div');
+    empty.style.cssText='text-align:center;padding:30px;color:#bbb';
+    empty.innerHTML='<div style="font-size:48px;margin-bottom:10px">🌴</div><div style="font-size:14px;font-weight:600;color:#999">Aucune demande</div>';
+    wrap.appendChild(empty);
+  } else {
+    congesData.slice().reverse().forEach(function(c){
+      var emp=(usersData||[]).find(function(u){return u.id===c.userId;});
+      var empNom=emp?emp.nom:c.userName||'—';
+      var statCol=c.statut==='confirme'?'#22c55e':c.statut==='refuse'?'#e53935':'#f59e0b';
+      var nbJours=c.joursOuvrables||0;
+      if(!nbJours&&c.dateDebut&&c.dateFin){
+        var d1=new Date(c.dateDebut);var d2=new Date(c.dateFin);
+        for(var d=new Date(d1);d<=d2;d.setDate(d.getDate()+1)){if(d.getDay()!==0&&d.getDay()!==6)nbJours++;}
+      }
+      var card=document.createElement('div');
+      card.style.cssText='background:#f0fae0;border-radius:12px;padding:12px 14px;margin-bottom:8px;border-left:4px solid '+statCol;
+      card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
+        '<div><div style="font-size:14px;font-weight:700;color:#1a1a1a">'+empNom+'</div>'+
+        '<div style="font-size:11px;color:#888;margin-top:2px">'+c.dateDebut+' → '+c.dateFin+
+          (nbJours?' · <strong>'+nbJours+'j ouvrable(s)</strong>':'')+
+          (c.motif?' · '+c.motif:'')+
+        '</div></div>'+
+        '<span style="background:'+(c.statut==='confirme'?'#e8f5e9':c.statut==='refuse'?'#ffebee':'#fff8e1')+';color:'+statCol+';border-radius:20px;padding:3px 8px;font-size:11px;font-weight:700">'+(c.statut==='confirme'?'✅ Validé':c.statut==='refuse'?'❌ Refusé':'⏳ En attente')+'</span>'+
+      '</div>';
+      if(c.statut==='demande'){
+        var btnsRow=document.createElement('div');btnsRow.style.cssText='display:flex;gap:6px;margin-top:6px';
+        var okB=document.createElement('button');
+        okB.style.cssText='flex:1;background:#e8f5e9;color:#16a34a;border:1.5px solid #22c55e;border-radius:20px;padding:7px;font-size:12px;font-weight:700;cursor:pointer';
+        okB.innerHTML='✓ Valider';
+        okB.onclick=(function(cid,nj,en){return function(){
+          var cx=(congesData||[]).find(function(x){return x.id===cid;});if(!cx)return;
+          cx.statut='confirme';cx.joursOuvrables=nj;cx.valideeLe=new Date().toISOString().split('T')[0];cx.validePar=currentUser||'Admin';
+          auditEnregistrer('conges','Congé validé',en+' '+cx.dateDebut+'→'+cx.dateFin+' ('+nj+'j)','Planning');
+          saveAll();renderPlanning();showToast('✅ Congé validé — '+nj+'j déduit(s)','success',3000);
+          addNotif('🌴','Congé validé',en+' : '+cx.dateDebut+' → '+cx.dateFin,'info');
+        };})(c.id,nbJours,empNom);
+        var noB=document.createElement('button');
+        noB.style.cssText='flex:1;background:#ffebee;color:#e53935;border:1.5px solid #e53935;border-radius:20px;padding:7px;font-size:12px;font-weight:700;cursor:pointer';
+        noB.innerHTML='✕ Refuser';
+        noB.onclick=(function(cid,en){return function(){
+          var cx=(congesData||[]).find(function(x){return x.id===cid;});if(!cx)return;
+          cx.statut='refuse';cx.refuseLe=new Date().toISOString().split('T')[0];
+          auditEnregistrer('conges','Congé refusé',en,'Planning');
+          saveAll();renderPlanning();showToast('Congé refusé');
+        };})(c.id,empNom);
+        btnsRow.appendChild(okB);btnsRow.appendChild(noB);card.appendChild(btnsRow);
+      }
+      wrap.appendChild(card);
+    });
   }
-  congesData.forEach(function(c){
-    var emp=usersData.find(function(u){return u.id===c.userId;});
-    var statCol=c.statut==='confirme'?'#22c55e':c.statut==='refuse'?'#e53935':'#f59e0b';
-    var card=document.createElement('div');
-    card.style.cssText='background:#f0fae0;border-radius:12px;padding:12px 14px;margin-bottom:8px;border-left:4px solid '+statCol;
-    card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
-      '<div>'+
-        '<div style="font-size:14px;font-weight:700;color:#1a1a1a">'+(emp?emp.nom:'—')+'</div>'+
-        '<div style="font-size:11px;color:#888;margin-top:2px">'+c.dateDebut+' → '+c.dateFin+(c.motif?' · '+c.motif:'')+'</div>'+
-      '</div>'+
-      '<span style="background:'+(c.statut==='confirme'?'#e8f5e9':c.statut==='refuse'?'#ffebee':'#fff8e1')+';color:'+statCol+';border-radius:20px;padding:3px 8px;font-size:11px;font-weight:700">'+(c.statut==='confirme'?'Validé':c.statut==='refuse'?'Refusé':'En attente')+'</span>'+
-    '</div>';
-    if(c.statut==='demande'){
-      var btnsRow=document.createElement('div');
-      btnsRow.style.cssText='display:flex;gap:6px';
-      var okB=document.createElement('button');
-      okB.style.cssText='flex:1;background:#e8f5e9;color:#16a34a;border:1.5px solid #22c55e;border-radius:20px;padding:7px;font-size:12px;font-weight:700;cursor:pointer';
-      okB.innerHTML='✓ Valider';
-      okB.onclick=(function(cid){return function(){var cx=congesData.find(function(x){return x.id===cid;});if(cx)cx.statut='confirme';saveAll();renderPlanning();showToast('Congé validé !');addNotif('🌴','Congé validé',cx?cx.motif:'','info');};})(c.id);
-      var noB=document.createElement('button');
-      noB.style.cssText='flex:1;background:#ffebee;color:#e53935;border:1.5px solid #e53935;border-radius:20px;padding:7px;font-size:12px;font-weight:700;cursor:pointer';
-      noB.innerHTML='✕ Refuser';
-      noB.onclick=(function(cid){return function(){var cx=congesData.find(function(x){return x.id===cid;});if(cx)cx.statut='refuse';saveAll();renderPlanning();showToast('Congé refusé');};})(c.id);
-      btnsRow.appendChild(okB);btnsRow.appendChild(noB);
-      card.appendChild(btnsRow);
-    }
-    wrap.appendChild(card);
-  });
   el.appendChild(wrap);
   addFab(function(){planningDemanderConge();});
 }
 
-function planningDemanderConge(preUserId){
-  var overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:5000;display:flex;align-items:flex-end;justify-content:center';
-  overlay.setAttribute('data-overlay','1');
-  var box=document.createElement('div');
-  box.style.cssText='background:#f0fae0;border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px';
-  var today=new Date().toISOString().split('T')[0];
-  var empOpts=usersData.filter(function(u){return u.actif;}).map(function(u){return '<option value="'+u.id+'"'+(u.id===preUserId?' selected':'')+'>'+u.nom+'</option>';}).join('');
-  box.innerHTML='<div style="width:40px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 16px"></div>'+
-    '<div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:14px">🌴 Demande de congé</div>'+
-    '<div class="ff"><label>Employé</label><select id="cg-user">'+empOpts+'</select></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-      '<div class="ff"><label>Du</label><input type="date" id="cg-deb" value="'+today+'"></div>'+
-      '<div class="ff"><label>Au</label><input type="date" id="cg-fin" value="'+today+'"></div>'+
-    '</div>'+
-    '<div class="ff"><label>Motif</label><select id="cg-motif"><option>Congés payés</option><option>RTT</option><option>Congé sans solde</option><option>Maladie</option><option>Famille</option><option>Autre</option></select></div>'+
-    '<div style="display:flex;gap:8px">'+
-      '<button onclick="planningConfirmConge()" class="btn-blue" style="flex:1;justify-content:center;padding:13px">Soumettre</button>'+
-      '<button onclick="var ov=document.querySelector(\'[data-overlay]\');if(ov)ov.remove()" class="btn-out" style="padding:13px">Annuler</button>'+
-    '</div>';
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
+function planningConfirmConge(){
+  var userId=parseInt(document.getElementById('cg-user').value);
+  var emp=(usersData||[]).find(function(u){return u.id===userId;});
+  var dateDebut=document.getElementById('cg-deb').value;
+  var dateFin=document.getElementById('cg-fin').value;
+  var motif=document.getElementById('cg-motif').value||'Congés payés';
+  var nbJours=0;
+  if(dateDebut&&dateFin){var d1=new Date(dateDebut);var d2=new Date(dateFin);for(var d=new Date(d1);d<=d2;d.setDate(d.getDate()+1)){if(d.getDay()!==0&&d.getDay()!==6)nbJours++;}}
+  if(motif==='Congés payés'&&emp){
+    var cp=congesCalculerCP(userId,emp.nom);
+    if(nbJours>cp.restants) showToast('⚠️ Solde insuffisant : '+cp.restants+'j restants, '+nbJours+'j demandés','error',4000);
+  }
+  congesData.push({id:Date.now(),userId:userId,userName:emp?emp.nom:'—',dateDebut:dateDebut,dateFin:dateFin,joursOuvrables:nbJours,motif:motif,statut:'demande',demandeeLe:new Date().toISOString().split('T')[0]});
+  var ov=document.querySelector('[data-overlay]');if(ov)ov.remove();
+  auditEnregistrer('conges','Demande congé',(emp?emp.nom:'—')+' '+dateDebut+'→'+dateFin+' ('+nbJours+'j)','Planning');
+  addNotif('🌴','Nouvelle demande de congé',(emp?emp.nom:'—')+' : '+nbJours+'j','warning');
+  saveAll();renderPlanning();showToast('Demande soumise — '+nbJours+'j ouvrable(s)');
 }
 
-function planningConfirmConge(){
-  congesData.push({id:Date.now(),userId:parseInt(document.getElementById('cg-user').value),dateDebut:document.getElementById('cg-deb').value,dateFin:document.getElementById('cg-fin').value,motif:document.getElementById('cg-motif').value||'—',statut:'demande'});
-  var ov=document.querySelector('[data-overlay]');if(ov)ov.remove();
-  addNotif('🌴','Nouvelle demande de congé','En attente de validation','warning');
-  saveAll();renderPlanning();showToast('Demande soumise !');
-}
 
 function planningRenderAbsences(el){
   var wrap=document.createElement('div');
   wrap.style.cssText='overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px 80px;flex:1';
-  var absences=planningData.filter(function(p){return p.type==='absence';});
-  if(!absences.length){
-    wrap.innerHTML='<div style="text-align:center;padding:48px 20px;color:#bbb"><div style="font-size:48px;margin-bottom:12px">✅</div><div style="font-size:15px;font-weight:600;color:#999">Aucune absence enregistrée</div></div>';
-    el.appendChild(wrap);addFab(function(){planningAjouterAbsence(null);});return;
-  }
-  // Grouper par mois
-  var grouped={};
-  absences.forEach(function(a){
-    var mk=a.date?a.date.slice(0,7):'—';
-    if(!grouped[mk]) grouped[mk]=[];
-    grouped[mk].push(a);
+
+  var typesAbsence=[
+    {id:'maladie',     label:'Arrêt maladie',        col:'#e53935',bg:'#ffebee',  icon:'🤒', maxJours:null},
+    {id:'accident',    label:'Accident du travail',   col:'#e67e22',bg:'#fff8e1', icon:'⚠️', maxJours:null},
+    {id:'maternite',   label:'Congé maternité',       col:'#9b59b6',bg:'#f5f0ff', icon:'🤰', maxJours:112},
+    {id:'paternite',   label:'Congé paternité',       col:'#1B6FE8',bg:'#e8f0ff', icon:'👨‍👶',maxJours:25},
+  ];
+
+  // ── Tableau récap par employé ──
+  var activeUsers=(usersData||[]).filter(function(u){return u.actif!==false;});
+
+  var titreRecap=document.createElement('div');
+  titreRecap.style.cssText='font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px';
+  titreRecap.textContent='RÉCAPITULATIF PAR EMPLOYÉ';
+  wrap.appendChild(titreRecap);
+
+  activeUsers.forEach(function(u){
+    var absUser=(planningData||[]).filter(function(a){
+      return a.type==='absence'&&(a.userId===u.id||a.userName===u.nom);
+    });
+    if(!absUser.length) return;
+
+    var ini=u.nom.split(' ').map(function(x){return x[0];}).join('').toUpperCase().slice(0,2);
+    var uCard=document.createElement('div');
+    uCard.style.cssText='background:#f0fae0;border-radius:14px;padding:12px 14px;margin-bottom:10px';
+
+    var uHdr=document.createElement('div');
+    uHdr.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px';
+    uHdr.innerHTML=
+      '<div style="width:36px;height:36px;border-radius:50%;background:#e53935;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0">'+ini+'</div>'+
+      '<div><div style="font-size:14px;font-weight:700">'+u.nom+'</div>'+
+      '<div style="font-size:11px;color:#888">'+absUser.length+' arrêt(s) enregistré(s)</div></div>';
+    uCard.appendChild(uHdr);
+
+    // KPI par type
+    var kpiGrid=document.createElement('div');
+    kpiGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:6px';
+    typesAbsence.forEach(function(t){
+      var absType=absUser.filter(function(a){return a.sousType===t.id;});
+      var totalJ=absType.reduce(function(s,a){return s+(a.joursCalendaires||a.jours||1);},0);
+      if(!absType.length) return;
+      var kpi=document.createElement('div');
+      kpi.style.cssText='background:'+t.bg+';border-radius:8px;padding:8px;display:flex;align-items:center;gap:8px';
+      kpi.innerHTML=
+        '<span style="font-size:18px">'+t.icon+'</span>'+
+        '<div><div style="font-size:12px;font-weight:800;color:'+t.col+'">'+totalJ+'j</div>'+
+        '<div style="font-size:9px;color:#888;text-transform:uppercase;font-weight:700;margin-top:1px">'+t.label+'</div></div>';
+      kpiGrid.appendChild(kpi);
+    });
+    uCard.appendChild(kpiGrid);
+    wrap.appendChild(uCard);
   });
-  Object.keys(grouped).sort().reverse().forEach(function(mk){
-    var title=document.createElement('div');
-    title.style.cssText='font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px;padding:0 2px';
-    var moisN=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-    var parts=mk.split('-');
-    title.textContent=(parts.length===2?moisN[parseInt(parts[1])-1]+' '+parts[0]:mk)+' — '+grouped[mk].length+' absence(s)';
-    wrap.appendChild(title);
-    grouped[mk].forEach(function(a){
-      var emp=usersData.find(function(u){return u.id===a.userId;});
+
+  // ── Historique des arrêts ──
+  var absences=(planningData||[]).filter(function(a){return a.type==='absence';});
+
+  var titreHisto=document.createElement('div');
+  titreHisto.style.cssText='font-size:11px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px';
+  titreHisto.textContent='HISTORIQUE DES ARRÊTS';
+  wrap.appendChild(titreHisto);
+
+  if(!absences.length){
+    var empty=document.createElement('div');
+    empty.style.cssText='text-align:center;padding:30px;color:#bbb';
+    empty.innerHTML='<div style="font-size:48px;margin-bottom:10px">✅</div><div style="font-size:14px;font-weight:600;color:#999">Aucun arrêt enregistré</div>';
+    wrap.appendChild(empty);
+  } else {
+    absences.slice().sort(function(a,b){return (b.dateDebut||b.date||'').localeCompare(a.dateDebut||a.date||'');}).forEach(function(a){
+      var emp=(usersData||[]).find(function(u){return u.id===a.userId;});
+      var empNom=emp?emp.nom:a.userName||'—';
+      var typeInfo=typesAbsence.find(function(t){return t.id===a.sousType;})||{label:a.poste||'Absence',col:'#888',bg:'#f5f5f5',icon:'❌'};
+      var jours=a.joursCalendaires||a.jours||1;
+
       var card=document.createElement('div');
-      card.style.cssText='background:#f0fae0;border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;border-left:3px solid #e53935';
-      card.innerHTML='<div>'+
-        '<div style="font-size:13px;font-weight:700;color:#1a1a1a">'+(emp?emp.nom:'—')+'</div>'+
-        '<div style="font-size:11px;color:#888;margin-top:2px">'+a.date+' · '+a.poste+'</div>'+
-      '</div>'+
-      '<span style="background:#ffebee;color:#e53935;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:700">❌</span>';
+      card.style.cssText='background:#f0fae0;border-radius:12px;padding:12px 14px;margin-bottom:8px;border-left:4px solid '+typeInfo.col;
+      card.innerHTML=
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'+
+          '<div>'+
+            '<div style="font-size:14px;font-weight:700;color:#1a1a1a">'+typeInfo.icon+' '+empNom+'</div>'+
+            '<div style="font-size:12px;color:#555;font-weight:700;margin-top:2px">'+typeInfo.label+'</div>'+
+            '<div style="font-size:11px;color:#888;margin-top:2px">'+
+              (a.dateDebut?a.dateDebut+(a.dateFin&&a.dateFin!==a.dateDebut?' → '+a.dateFin:''):a.date||'—')+
+              ' · <strong>'+jours+' jour(s)</strong>'+
+            '</div>'+
+            (a.note?'<div style="font-size:11px;color:#888;margin-top:2px;font-style:italic">'+a.note+'</div>':'')+
+          '</div>'+
+          '<span style="background:'+typeInfo.bg+';color:'+typeInfo.col+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;flex-shrink:0">'+jours+'j</span>'+
+        '</div>';
       wrap.appendChild(card);
     });
-  });
+  }
+
   el.appendChild(wrap);
-  addFab(function(){planningAjouterAbsence(null);});
+  addFab(function(){planningAjouterAbsenceComplete();});
 }
+
+function planningAjouterAbsenceComplete(){
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f7;z-index:5000;display:flex;flex-direction:column';
+
+  var hdr=document.createElement('div');
+  hdr.style.cssText='background:#e53935;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
+  var bk=document.createElement('button');
+  bk.style.cssText='background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+  bk.innerHTML='&#8592;';bk.onclick=function(){ov.remove();};
+  hdr.appendChild(bk);
+  var ht=document.createElement('div');ht.style.cssText='font-size:17px;font-weight:700;color:#fff';ht.textContent='Saisir un arrêt';
+  hdr.appendChild(ht);ov.appendChild(hdr);
+
+  var wrap=document.createElement('div');
+  wrap.style.cssText='overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 14px 100px;flex:1';
+
+  // Employé
+  var empDiv=document.createElement('div');empDiv.className='ff';
+  var empLbl=document.createElement('label');empLbl.textContent='Employé';empDiv.appendChild(empLbl);
+  var empSel=document.createElement('select');empSel.id='abs-user';
+  var activeUsers=(usersData||[]).filter(function(u){return u.actif!==false;});
+  activeUsers.forEach(function(u){var o=document.createElement('option');o.value=u.id;o.textContent=u.nom;empSel.appendChild(o);});
+  empDiv.appendChild(empSel);wrap.appendChild(empDiv);
+
+  // Type d'arrêt — sélection visuelle
+  var typeDiv=document.createElement('div');typeDiv.className='ff';
+  var typeLbl=document.createElement('label');typeLbl.textContent='Type d\'arrêt';typeDiv.appendChild(typeLbl);
+  var types=[
+    {id:'maladie',    label:'Arrêt maladie',       icon:'🤒',col:'#e53935'},
+    {id:'accident',   label:'Accident du travail',  icon:'⚠️',col:'#e67e22'},
+    {id:'maternite',  label:'Congé maternité',      icon:'🤰',col:'#9b59b6'},
+    {id:'paternite',  label:'Congé paternité',      icon:'👨‍👶',col:'#1B6FE8'},
+  ];
+  var selectedType='maladie';
+  var typeGrid=document.createElement('div');typeGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px';
+  types.forEach(function(t){
+    var btn=document.createElement('button');
+    btn.id='abs-type-'+t.id;
+    btn.style.cssText='background:'+(t.id===selectedType?'#ffebee':'#f0fae0')+';border:2px solid '+(t.id===selectedType?t.col:'#dde8c8')+';border-radius:12px;padding:10px;cursor:pointer;text-align:center;font-size:12px;font-weight:700;color:'+(t.id===selectedType?t.col:'#555');
+    btn.innerHTML='<div style="font-size:22px;margin-bottom:4px">'+t.icon+'</div>'+t.label;
+    btn.onclick=function(){
+      selectedType=t.id;
+      types.forEach(function(x){
+        var b=document.getElementById('abs-type-'+x.id);
+        if(b){b.style.background='#f0fae0';b.style.borderColor='#dde8c8';b.style.color='#555';}
+      });
+      btn.style.background='#ffebee';btn.style.borderColor=t.col;btn.style.color=t.col;
+    };
+    typeGrid.appendChild(btn);
+  });
+  typeDiv.appendChild(typeGrid);wrap.appendChild(typeDiv);
+
+  // Dates
+  var today=new Date().toISOString().split('T')[0];
+  var datesGrid=document.createElement('div');datesGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
+  var debDiv=document.createElement('div');debDiv.className='ff';
+  var debLbl=document.createElement('label');debLbl.textContent='Date de début';debDiv.appendChild(debLbl);
+  var debInp=document.createElement('input');debInp.type='date';debInp.id='abs-deb';debInp.value=today;debDiv.appendChild(debInp);datesGrid.appendChild(debDiv);
+  var finDiv=document.createElement('div');finDiv.className='ff';
+  var finLbl=document.createElement('label');finLbl.textContent='Date de fin (prévisionnelle)';finDiv.appendChild(finLbl);
+  var finInp=document.createElement('input');finInp.type='date';finInp.id='abs-fin';finInp.value=today;finDiv.appendChild(finInp);datesGrid.appendChild(finDiv);
+  wrap.appendChild(datesGrid);
+
+  // Note / certificat
+  var noteDiv=document.createElement('div');noteDiv.className='ff';
+  var noteLbl=document.createElement('label');noteLbl.textContent='Note / N° certificat';noteDiv.appendChild(noteLbl);
+  var noteInp=document.createElement('input');noteInp.type='text';noteInp.id='abs-note';noteInp.placeholder='Optionnel';noteDiv.appendChild(noteInp);wrap.appendChild(noteDiv);
+
+  // Info légale
+  var infoCard=document.createElement('div');
+  infoCard.style.cssText='background:#e8f0ff;border-left:3px solid #1B6FE8;border-radius:10px;padding:10px 14px;font-size:12px;color:#1B6FE8;margin-bottom:8px';
+  infoCard.innerHTML='ℹ️ L\'arrêt sera enregistré et tracé dans l\'historique. Les jours calendaires sont calculés automatiquement.';
+  wrap.appendChild(infoCard);
+
+  ov.appendChild(wrap);
+
+  var bb=document.createElement('div');
+  bb.style.cssText='background:#f0fae0;border-top:1px solid #dde8c8;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;flex-shrink:0';
+  var sv=document.createElement('button');
+  sv.style.cssText='flex:1;background:#e53935;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer';
+  sv.textContent='💾 Enregistrer';
+  sv.onclick=function(){
+    var userId=parseInt(document.getElementById('abs-user').value);
+    var emp=(usersData||[]).find(function(u){return u.id===userId;});
+    var dateDebut=document.getElementById('abs-deb').value;
+    var dateFin=document.getElementById('abs-fin').value;
+    var note=document.getElementById('abs-note').value;
+
+    // Calcul jours calendaires
+    var jours=1;
+    if(dateDebut&&dateFin){
+      var d1=new Date(dateDebut);var d2=new Date(dateFin);
+      jours=Math.round((d2-d1)/86400000)+1;
+      if(jours<1)jours=1;
+    }
+
+    var typeInfo=types.find(function(t){return t.id===selectedType;})||types[0];
+    var entry={
+      id:Date.now(),
+      type:'absence',
+      sousType:selectedType,
+      label:typeInfo.label,
+      userId:userId,
+      userName:emp?emp.nom:'—',
+      poste:emp?emp.poste||'—':'—',
+      date:dateDebut,
+      dateDebut:dateDebut,
+      dateFin:dateFin,
+      joursCalendaires:jours,
+      note:note,
+      saisiePar:currentUser||'Admin',
+      saisieLe:new Date().toISOString().split('T')[0],
+      resto:currentResto||'resto1'
+    };
+
+    planningData.unshift(entry);
+    auditEnregistrer('absences',typeInfo.label,(emp?emp.nom:'—')+' '+dateDebut+'→'+dateFin+' ('+jours+'j)','Planning');
+    addNotif('❌',typeInfo.label,(emp?emp.nom:'—')+' : '+jours+' jour(s)','warning');
+    saveAll();ov.remove();renderPlanning();
+    showToast('✅ '+typeInfo.label+' enregistré — '+jours+' jour(s)','success',3000);
+  };
+  var cn=document.createElement('button');
+  cn.style.cssText='background:#f0fae0;color:#888;border:1.5px solid #dde8c8;border-radius:14px;padding:15px;font-size:14px;cursor:pointer;min-width:80px';
+  cn.textContent='Annuler';cn.onclick=function(){ov.remove();};
+  bb.appendChild(sv);bb.appendChild(cn);ov.appendChild(bb);
+  document.body.appendChild(ov);
+}
+
+
 
 // ════════════════
 // EXPORT PDF HACCP
@@ -8166,6 +8803,7 @@ function ficheCalculerCout(f){return f?f.cout||0:0;}
 function ficheProduire(id){showToast("Production lancée !");}
 
 function ficheOuvrirFormulaire(ficheExistante){
+  _ficheCurrentPhoto = null; // Reset à chaque ouverture
   var overlay=document.createElement("div");
   overlay.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f7;z-index:5000;display:flex;flex-direction:column";
   var isEdit=!!ficheExistante;
@@ -8260,7 +8898,9 @@ function ficheOuvrirFormulaire(ficheExistante){
       if(nv&&nv.value.trim()) ings.push({nom:nv.value.trim(),qte:parseFloat(qv?qv.value:0)||0,unite:uv?uv.value:"kg"});
     });
     var fichePhoto=window._ficheCurrentPhoto||(ficheExistante?ficheExistante.photo||null:null);
-    var fiche={id:ficheExistante?ficheExistante.id:Date.now(),nom:nom,cat:document.getElementById("ft-cat").value,portions:parseInt(document.getElementById("ft-portions").value)||4,cout:parseFloat(document.getElementById("ft-cout").value)||0,prix:parseFloat(document.getElementById("ft-prix").value)||0,allergenes:document.getElementById("ft-allergenes").value,preparation:document.getElementById("ft-preparation").value,ingredients:ings,photo:fichePhoto,creeLe:ficheExistante?ficheExistante.creeLe:new Date().toISOString().split("T")[0],modifieLe:new Date().toISOString().split("T")[0]};
+    // Ne pas stocker la photo base64 dans localStorage (trop lourd)
+    // On garde juste un flag pour savoir qu'elle existe
+    var fiche={id:ficheExistante?ficheExistante.id:Date.now(),nom:nom,cat:document.getElementById("ft-cat").value,portions:parseInt(document.getElementById("ft-portions").value)||4,cout:parseFloat(document.getElementById("ft-cout").value)||0,prix:parseFloat(document.getElementById("ft-prix").value)||0,allergenes:document.getElementById("ft-allergenes").value,preparation:document.getElementById("ft-preparation").value,ingredients:ings,creeLe:ficheExistante?ficheExistante.creeLe:new Date().toISOString().split("T")[0],modifieLe:new Date().toISOString().split("T")[0]};
     if(isEdit){var idx=fichesData.findIndex(function(x){return x.id===fiche.id;});if(idx>=0)fichesData[idx]=fiche;else fichesData.unshift(fiche);}
     else fichesData.unshift(fiche);
     auditEnregistrer("fiches",isEdit?"Fiche modifiée":"Fiche créée",nom,"Fiches Techniques");
@@ -8274,14 +8914,106 @@ var _ficheCurrentPhoto = null;
 
 function ficheSetPhoto(input){
   if(!input||!input.files||!input.files[0]) return;
-  var reader=new FileReader();
-  reader.onload=function(e){
-    _ficheCurrentPhoto=e.target.result;
-    var prev=document.getElementById('fiche-photo-preview');
-    if(prev) prev.innerHTML='<img src="'+e.target.result+'" style="width:100%;height:100%;object-fit:cover;border-radius:12px">'+
-      '<div style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700">✓ Photo OK</div>';
+  var file = input.files[0];
+  var reader = new FileReader();
+  reader.onload = function(e){
+    // Compresser la photo avant de la stocker (max 800px, qualité 0.7)
+    var img = new Image();
+    img.onload = function(){
+      var canvas = document.createElement('canvas');
+      var maxW = 800; var maxH = 800;
+      var w = img.width; var h = img.height;
+      if(w > maxW){ h = Math.round(h*maxW/w); w = maxW; }
+      if(h > maxH){ w = Math.round(w*maxH/h); h = maxH; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      var compressed = canvas.toDataURL('image/jpeg', 0.7);
+      _ficheCurrentPhoto = compressed;
+
+      // Afficher preview
+      var prev = document.getElementById('fiche-photo-preview');
+      if(prev){
+        prev.innerHTML = '<img src="'+compressed+'" style="width:100%;height:100%;object-fit:cover;border-radius:12px">'+
+          '<div style="position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;border-radius:12px">'+
+            '<div style="color:#fff;font-size:13px;font-weight:700;text-align:center">🤖 Analyse en cours...</div>'+
+          '</div>';
+      }
+
+      // Lancer l'analyse IA
+      var b64 = compressed.split(',')[1];
+      var apiKey = (parametresData&&parametresData.anthropicApiKey)||'';
+      if(!apiKey){
+        if(prev) prev.innerHTML = '<img src="'+compressed+'" style="width:100%;height:100%;object-fit:cover;border-radius:12px">'+
+          '<div style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:3px 8px;font-size:11px">✓ Photo OK (pas de clé API)</div>';
+        showToast('Clé API manquante — saisie manuelle requise','warning',3000);
+        return;
+      }
+
+      anthropicCall({
+        model:"claude-sonnet-4-6", max_tokens:1000,
+        messages:[{role:"user",content:[
+          {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
+          {type:"text",text:"Analyse cette photo de fiche technique ou recette de cuisine. Reponds UNIQUEMENT en JSON pur sans markdown: {nom, cat (Entree/Plat/Dessert/Sauce/Base/Autre), portions, cout, prix, temps, allergenes, preparation, ingredients:[{nom,qte,unite}]}. Si absent mets null ou valeur vide."}
+        ]}]
+      })
+      .then(function(data){
+        var txt = data.content&&data.content[0] ? data.content[0].text : '';
+        txt = txt.replace(/```json|```/g,'').trim();
+        var info;
+        try{ info = JSON.parse(txt); } catch(ex){ info = null; }
+
+        // Mettre à jour preview
+        if(prev) prev.innerHTML = '<img src="'+compressed+'" style="width:100%;height:100%;object-fit:cover;border-radius:12px">'+
+          '<div style="position:absolute;bottom:6px;right:8px;background:rgba(22,163,74,.9);color:#fff;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700">✅ Analyse OK</div>';
+
+        if(!info){ showToast('Photo lue — remplissage manuel','warning'); return; }
+
+        // Pré-remplir les champs du formulaire
+        var cats=['Entrée','Plat','Dessert','Sauce','Base','Autre'];
+        if(info.nom){ var n=document.getElementById('ft-nom'); if(n) n.value=info.nom; }
+        if(info.cat){
+          var catSel=document.getElementById('ft-cat');
+          if(catSel){
+            cats.forEach(function(c,i){ if(c.toLowerCase().indexOf((info.cat||'').toLowerCase().slice(0,4))>=0) catSel.selectedIndex=i; });
+          }
+        }
+        if(info.portions){ var p=document.getElementById('ft-portions'); if(p) p.value=info.portions; }
+        if(info.cout){ var co=document.getElementById('ft-cout'); if(co) co.value=info.cout; }
+        if(info.prix){ var pr=document.getElementById('ft-prix'); if(pr) pr.value=info.prix; }
+        if(info.allergenes){ var al=document.getElementById('ft-allergenes'); if(al) al.value=info.allergenes; }
+        if(info.preparation){ var prep=document.getElementById('ft-preparation'); if(prep) prep.value=info.preparation; }
+
+        // Pré-remplir les ingrédients
+        if(info.ingredients&&Array.isArray(info.ingredients)&&info.ingredients.length){
+          // Vider la liste existante et reconstruire
+          var ingList=document.getElementById('ft-ingredients');
+          if(ingList){
+            // Déclencher l'ajout des ingrédients via la variable ingredients de la closure
+            // On injecte dans les inputs existants ou on en crée
+            var existingRows = ingList.querySelectorAll('div');
+            info.ingredients.forEach(function(ing, idx){
+              var nomInp=document.getElementById('ing-nom-'+idx);
+              var qteInp=document.getElementById('ing-qte-'+idx);
+              var uniteInp=document.getElementById('ing-unite-'+idx);
+              if(nomInp){ nomInp.value=ing.nom||''; }
+              if(qteInp){ qteInp.value=ing.qte||0; }
+              if(uniteInp){ uniteInp.value=ing.unite||'kg'; }
+            });
+          }
+          showToast('🍽️ Fiche détectée — '+info.ingredients.length+' ingrédient(s) trouvé(s) !','success',3000);
+        } else {
+          showToast('🍽️ Fiche analysée — vérifiez les champs','success',3000);
+        }
+      })
+      .catch(function(){
+        if(prev) prev.innerHTML = '<img src="'+compressed+'" style="width:100%;height:100%;object-fit:cover;border-radius:12px">'+
+          '<div style="position:absolute;bottom:6px;right:8px;background:rgba(229,57,53,.9);color:#fff;border-radius:6px;padding:3px 8px;font-size:11px">⚠️ Erreur IA</div>';
+        showToast('Erreur IA — saisie manuelle requise','error',3000);
+      });
+    };
+    img.src = e.target.result;
   };
-  reader.readAsDataURL(input.files[0]);
+  reader.readAsDataURL(file);
 }
 
 
@@ -9233,7 +9965,7 @@ function renderParametres(){
       var headers={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
       if(key) headers["x-api-key"]=key;
       fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
+        method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
         headers:headers,
         body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:10,messages:[{role:"user",content:"Dis juste OK"}]})
       }).then(function(r){return r.json();}).then(function(d){
@@ -10194,7 +10926,7 @@ function avertissementOuvrirFormulaire(){
   step1.appendChild(step1Title);
 
   // Liste des salariés
-  var activeUsers=usersData.filter(function(u){return u.actif;});
+  var activeUsers=(usersData||[]).filter(function(u){return u.actif!==false;});
   var selectedUser=null;
   var userGrid=document.createElement('div');
   userGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px';
