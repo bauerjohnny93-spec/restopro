@@ -2,35 +2,9 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
   <link rel="manifest" href="data:application/json,{%22name%22:%22RestoPro%22,%22short_name%22:%22RestoPro%22,%22display%22:%22standalone%22,%22start_url%22:%22.%2F%22,%22background_color%22:%22%23b8dca0%22,%22theme_color%22:%22%231B6FE8%22,%22scope%22:%22.%2F%22}">
-  <script>
-  // Service Worker pour persistence PWA
-  if('serviceWorker' in navigator){
-    var swCode = `
-      const CACHE = 'restopro-v1';
-      self.addEventListener('install', e => { self.skipWaiting(); });
-      self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
-      self.addEventListener('fetch', e => {
-        // Ne pas intercepter les appels API
-        if(e.request.url.includes('anthropic.com')) return;
-        e.respondWith(
-          caches.open(CACHE).then(cache =>
-            cache.match(e.request).then(cached => {
-              var fresh = fetch(e.request).then(res => {
-                if(res.ok) cache.put(e.request, res.clone());
-                return res;
-              }).catch(() => cached);
-              return cached || fresh;
-            })
-          )
-        );
-      });
-    `;
-    var blob = new Blob([swCode], {type:'application/javascript'});
-    var swUrl = URL.createObjectURL(blob);
-    navigator.serviceWorker.register(swUrl).catch(function(){});
-  }
-  </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -434,9 +408,9 @@ function saveAll() {
       frigosData: frigosData.map(function(f){ return {id:f.id,nom:f.nom,groupe:f.groupe,icoBg:f.icoBg,ico:f.ico,smin:f.smin,smax:f.smax,lim:f.lim,fait:f.fait,val:f.val,heure:f.heure,signe:f.signe,heureReleve:f.heureReleve}; }),
       tempReleves: tempReleves,
       dlcItems: dlcItems,
-      recepItems: recepItems,
+      recepItems: recepItems.map(function(r){ return Object.assign({},r,{photoBL:null}); }),
       stockItems: stockItems,
-      stockMouvements: stockMouvements.slice(-500),
+      stockMouvements: stockMouvements.slice(-200),
       echangesData: echangesData,
       pertesData: pertesData,
       fichesData: fichesData,
@@ -449,70 +423,71 @@ function saveAll() {
       infoData: infoData,
       planningData: planningData,
       congesData: congesData,
-      iaHistorique: iaHistorique,
+      iaHistorique: iaHistorique.slice(-30),
       onboardingDone: onboardingDone,
-      auditLog: auditLog.slice(-500),
+      auditLog: auditLog.slice(-200),
       parametresData: parametresData,
       algPlats: algPlats,
       briefData: briefData,
       briefHistorique: briefHistorique,
       chkGroupes: chkGroupes,
       chkHistorique: chkHistorique,
-      scanHistory: scanHistory,
+      scanHistory: scanHistory.slice(-100),
       pointagesData: pointagesData,
-      notificationsData: notificationsData,
-      photosData: [],  // Ne jamais stocker les photos base64
+      notificationsData: notificationsData.slice(-50),
+      photosData: [],
       fournisseursList: fournisseursList
     };
     var json = JSON.stringify(data);
     localStorage.setItem(LS_KEY, json);
-    showSaveBadge();
+    var kb = Math.round(json.length / 1024);
+    showSaveBadge(kb);
   } catch(e) {
-    // Quota dépassé — on nettoie et on réessaie
     if(e && (e.name==='QuotaExceededError' || e.code===22 || e.code===1014)){
+      // Alléger au maximum
+      auditLog = auditLog.slice(-50);
+      stockMouvements = stockMouvements.slice(-50);
+      iaHistorique = iaHistorique.slice(-10);
+      scanHistory = scanHistory.slice(-20);
+      notificationsData = notificationsData.slice(-20);
       try {
-        // Alléger : réduire auditLog, stockMouvements, iaHistorique
-        auditLog = auditLog.slice(-100);
-        stockMouvements = stockMouvements.slice(-100);
-        iaHistorique = iaHistorique.slice(-20);
-        scanHistory = scanHistory.slice(-50);
         var data2 = {
           usersData:usersData, prodItems:prodItems, dlcItems:dlcItems,
-          recepItems:recepItems, stockItems:stockItems, stockMouvements:stockMouvements,
-          fichesData:fichesData, ventesData:ventesData, caisseData:caisseData,
-          achatsData:achatsData, approData:approData, cartonsData:cartonsData,
-          planningData:planningData, congesData:congesData, pointagesData:pointagesData,
-          pertesData:pertesData, parametresData:parametresData, fournisseursList:fournisseursList,
-          usersData:usersData, tafTasks:tafTasks, frigosData:frigosData,
-          auditLog:auditLog, iaHistorique:iaHistorique, scanHistory:scanHistory,
+          recepItems:recepItems.map(function(r){return Object.assign({},r,{photoBL:null});}),
+          stockItems:stockItems, fichesData:fichesData, ventesData:ventesData,
+          caisseData:caisseData, achatsData:achatsData, approData:approData,
+          cartonsData:cartonsData, planningData:planningData, congesData:congesData,
+          pointagesData:pointagesData, pertesData:pertesData,
+          parametresData:parametresData, fournisseursList:fournisseursList,
+          tafTasks:tafTasks, frigosData:frigosData, auditLog:auditLog,
           algPlats:algPlats, briefData:briefData, chkGroupes:chkGroupes,
-          chkHistorique:chkHistorique, echangesData:echangesData, infoData:infoData,
-          onboardingDone:onboardingDone, notificationsData:notificationsData,
-          photosData:[], tempReleves:tempReleves
+          chkHistorique:chkHistorique, echangesData:echangesData,
+          infoData:infoData, onboardingDone:onboardingDone,
+          stockMouvements:stockMouvements, iaHistorique:iaHistorique,
+          scanHistory:scanHistory, notificationsData:notificationsData,
+          photosData:[], produitsVendus:produitsVendus, stockSorties:[]
         };
         localStorage.setItem(LS_KEY, JSON.stringify(data2));
-        showSaveBadge();
-        console.warn('SaveAll: quota allégé OK');
+        showSaveBadge('allégé');
       } catch(e2){
-        showToast('⚠️ Stockage plein — certaines données non sauvegardées','error',5000);
-        console.error('SaveAll: quota fatal', e2);
+        showToast('⚠️ Stockage plein ! Exportez vos données dans Paramètres','error',6000);
       }
     } else {
-      showToast('⚠️ Erreur sauvegarde: '+( e&&e.message||e),'error',4000);
-      console.error('SaveAll error:', e);
+      showToast('⚠️ Erreur sauvegarde: '+(e&&e.message||String(e)),'error',4000);
+      console.error('saveAll:', e);
     }
   }
 }
 
-function showSaveBadge() {
+function showSaveBadge(kb) {
   var old = document.getElementById('save-badge');
   if (old) old.remove();
   var b = document.createElement('div');
   b.id = 'save-badge';
   b.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:7px 18px;border-radius:20px;font-size:12px;font-weight:700;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,.2);pointer-events:none';
-  b.textContent = '✓ Sauvegardé';
+  b.textContent = '✓ Sauvegardé' + (kb ? ' · ' + kb + ' Ko' : '');
   document.body.appendChild(b);
-  setTimeout(function(){ b.remove(); }, 1800);
+  setTimeout(function(){ b.remove(); }, 2500);
 }
 
 function loadAll() {
@@ -3587,7 +3562,7 @@ var auditFiltre = 'tout';
 var parametresDefaut = {
   alerteDlcJours:7, alerteStockMin:true, alerteFrigoHeure:'08:00',
   alertePertesSeuil:20, alerteRuptureAuto:true,
-  nomResto1:'Chez Johnny', nomResto2:'Chez Anne-So',
+  nomResto1:'Resto 1', nomResto2:'Resto 2',
   couverts_max_midi:40, couverts_max_soir:60,
   postes:['Cuisine chaude','Cuisine froide','Plonge','Salle','Bar','Accueil'],
   theme:'vert', nbReleves:2,
