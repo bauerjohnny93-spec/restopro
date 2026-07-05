@@ -638,7 +638,7 @@ function kLogout() {
   document.getElementById('login-view').style.display = 'flex';
 }
 
-loadAll();
+// loadAll() déplacé après les déclarations
 kRefresh();
 
 // ════════════════════════════════
@@ -786,87 +786,31 @@ function removeFab() {
 }
 
 // ── Helper API Anthropic — résistant WiFi + 4G/5G ──
-function anthropicFetch(body){
-  return anthropicCall(body);
+function geminiCall(prompt, imageB64, imageMime){
+  var apiKey = (parametresData&&parametresData.anthropicApiKey)||'';
+  if(!apiKey) return Promise.reject(new Error('Clé API Gemini manquante'));
+  var model = imageB64 ? 'gemini-1.5-flash' : 'gemini-1.5-flash';
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+apiKey;
+  var parts = [];
+  if(imageB64) parts.push({inline_data:{mime_type:imageMime||'image/jpeg',data:imageB64}});
+  parts.push({text: prompt});
+  return fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:parts}],generationConfig:{maxOutputTokens:1500}})
+  }).then(function(r){return r.json();})
+  .then(function(data){
+    if(data.error) throw new Error(data.error.message||'Erreur Gemini');
+    var text = data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]?data.candidates[0].content.parts[0].text:'';
+    // Retourner au format compatible avec l'ancien code Anthropic
+    return {content:[{text:text}]};
+  });
 }
 
-function anthropicCall(body, maxRetries){
-  maxRetries = maxRetries !== undefined ? maxRetries : 4;
-  var apiKey = (parametresData && parametresData.anthropicApiKey) || '';
-  var headers = {
-    "Content-Type": "application/json",
-    "anthropic-dangerous-direct-browser-access": "true"
-  };
-  if(apiKey) headers["x-api-key"] = apiKey;
+// Alias pour compatibilité
+function anthropicFetch(body){ return geminiCall(body._prompt||'', body._b64, body._mime); }
+function anthropicCall(body){ return geminiCall(body._prompt||'', body._b64, body._mime); }
 
-  // Timeouts progressifs selon la tentative (WiFi lent → 4G → 5G)
-  var timeouts = [30000, 45000, 60000, 60000];
-
-  function tryOnce(attempt){
-    var timeout = timeouts[Math.min(attempt-1, timeouts.length-1)];
-    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timeoutId = controller ? setTimeout(function(){
-      controller.abort();
-    }, timeout) : null;
-
-    var fetchOpts = {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify(body),
-      // Pas de cache — important sur les réseaux captifs WiFi
-      cache: "no-store",
-      mode: "cors"
-    };
-    if(controller) fetchOpts.signal = controller.signal;
-
-    return fetch("https://api.anthropic.com/v1/messages", fetchOpts)
-      .then(function(r){
-        if(timeoutId) clearTimeout(timeoutId);
-        if(!r.ok && r.status === 0){
-          // Status 0 = bloqué par réseau/CORS
-          throw new Error("Network blocked (status 0)");
-        }
-        return r.json();
-      })
-      .catch(function(err){
-        if(timeoutId) clearTimeout(timeoutId);
-        var isAbort = err && err.name === 'AbortError';
-        var isNetwork = err && (err.message||'').indexOf('fetch') >= 0;
-
-        if(attempt < maxRetries){
-          // Backoff exponentiel : 1s, 2s, 4s entre les tentatives
-          var delay = Math.pow(2, attempt-1) * 1000;
-          return new Promise(function(resolve, reject){
-            setTimeout(function(){
-              tryOnce(attempt + 1).then(resolve).catch(reject);
-            }, delay);
-          });
-        }
-        throw err;
-      });
-  }
-
-  return tryOnce(1);
-}
-
-
-function showToast(msg, type, duration) {
-  // Supprimer l'ancien toast
-  var old=document.getElementById('toast-msg');if(old)old.remove();
-  var t=document.createElement('div');
-  t.id='toast-msg';
-  var bg='rgba(26,26,26,.95)';
-  if(type==='success'||(!type&&(msg.indexOf('✅')>=0||msg.indexOf('✓')>=0))) bg='rgba(22,163,74,.95)';
-  else if(type==='error'||(!type&&(msg.indexOf('❌')>=0||msg.indexOf('Erreur')>=0))) bg='rgba(229,57,53,.95)';
-  else if(type==='warning'||(!type&&msg.indexOf('⚠️')>=0)) bg='rgba(230,126,34,.95)';
-  else if(!type&&(msg.indexOf('🤖')>=0||msg.indexOf('💡')>=0||msg.indexOf('ℹ️')>=0)) bg='rgba(27,111,232,.95)';
-  t.style.cssText='position:fixed;top:calc(20px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%) translateY(-8px);background:'+bg+';color:#fff;padding:11px 20px;border-radius:22px;font-size:14px;font-weight:600;z-index:9999;white-space:nowrap;max-width:85vw;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 20px rgba(0,0,0,.2);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none';
-  t.textContent=msg;
-  document.body.appendChild(t);
-  requestAnimationFrame(function(){t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';});
-  clearTimeout(window._toastTimer);
-  window._toastTimer=setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(-50%) translateY(-8px)';setTimeout(function(){if(t.parentNode)t.remove();},250);}, duration||2500);
-}
 
 // ════════════════════════════════
 // TAF
@@ -2020,6 +1964,10 @@ var briefData = {
 
 var briefHistorique = [];
 var briefLecteurs = ['JB'];
+
+
+// Charger les données sauvegardées APRÈS toutes les déclarations
+loadAll();
 
 function briefGetDate(){var d=new Date();d.setDate(d.getDate()+briefDateOffset);return d;}
 function briefNavDay(n){briefDateOffset+=n;renderBriefings();}
@@ -3251,18 +3199,7 @@ function scanInventairePhoto(input){
     if(resultDiv) resultDiv.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:28px;margin-bottom:8px">🔍</div><div style="font-size:14px;color:#555;font-weight:600">Analyse en cours...</div></div>';
 
     var prompt="Scanner etiquette alimentaire. JSON pur uniquement: {nom, dlc jj/mm/aaaa, lot, poids, unite, fournisseur}. Champs absents = chaine vide.";
-    fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
-      headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})(),
-      body:JSON.stringify({
-        model:"claude-sonnet-4-6",
-        max_tokens:400,
-        messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:mime,data:b64}},
-          {type:"text",text:prompt}
-        ]}]
-      })
-    })
+    geminiCall(prompt, b64, mime)
     .then(function(r){return r.json();})
     .then(function(data){
       var txt=data.content&&data.content[0]?data.content[0].text:"";
@@ -3456,19 +3393,8 @@ function scanRapidePhoto(input){
     var resultDiv=document.getElementById('rapide-result');
     if(resultDiv) resultDiv.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:28px;margin-bottom:8px">&#9889;</div><div style="font-size:14px;color:#555;font-weight:600">Analyse en cours...</div></div>';
 
-    var promptTexte = "Scanner alimentaire expert. JSON pur: {nom, dlc jj/mm/aaaa, lot, poids, unite, temperature, fournisseur, categorie}. Absent = vide.";
-    fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
-      headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})(),
-      body:JSON.stringify({
-        model:"claude-sonnet-4-6",
-        max_tokens:600,
-        messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:mime,data:b64}},
-          {type:"text",text:promptTexte}
-        ]}]
-      })
-    })
+    var promptTexte = "Scanner alimentaire expert. JSON pur sans markdown: {nom, dlc, lot, poids, unite, temperature, fournisseur, categorie}. Absent = vide.";
+    geminiCall(promptTexte, b64, mime)
     .then(function(r){return r.json();})
     .then(function(data){
       var txt=data.content&&data.content[0]?data.content[0].text:"";
@@ -3926,16 +3852,7 @@ function scanOpenUnitaire(){
     var hdrs = {"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
     if(parametresData&&parametresData.anthropicApiKey) hdrs["x-api-key"] = parametresData.anthropicApiKey;
 
-    fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(), headers:hdrs,
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:1500,
-        messages:[{role:"user", content:[
-          {type:"image", source:{type:"base64", media_type: mime.startsWith('image/')?mime:'image/jpeg', data:b64}},
-          {type:"text", text: prompts[selectedType]||prompts.autre}
-        ]}]
-      })
-    })
+        geminiCall(prompts[selectedType]||prompts.autre, b64, mime.startsWith('image/')?mime:'image/jpeg')
     .then(function(r){return r.json();})
     .then(function(data){
       var txt = data.content&&data.content[0] ? data.content[0].text : '';
@@ -4338,16 +4255,7 @@ function recepOpenFicheReception(fourn, dateVal){
         var b64 = e.target.result.split(',')[1];
         var mime = file.type||'image/jpeg';
         var hdrs=(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})();
-        fetch("https://api.anthropic.com/v1/messages",{
-          method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(), headers:hdrs,
-          body:JSON.stringify({
-            model:"claude-sonnet-4-6", max_tokens:400,
-            messages:[{role:"user",content:[
-              {type:"image",source:{type:"base64",media_type:mime,data:b64}},
-              {type:"text",text:"Etiquette alimentaire. JSON pur uniquement: {nom, lot, dlc_format_jj_mm_aaaa, poids_kg, fournisseur}. Si absent mets null."}
-            ]}]
-          })
-        })
+          geminiCall("Etiquette alimentaire. JSON pur sans markdown: {nom, lot, dlc, poids_kg, fournisseur}. Absent = null.", b64, mime)
         .then(function(r){return r.json();})
         .then(function(data){
           var txt = data.content&&data.content[0]?data.content[0].text:'';
@@ -7040,16 +6948,9 @@ function iaEnvoyer(question){
   // Construire l'historique pour l'API (max 10 derniers échanges)
   var apiMessages=iaHistorique.slice(-10).map(function(m){return {role:m.role,content:m.content};});
 
-  fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
-    headers:(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})(),
-    body:JSON.stringify({
-      model:"claude-sonnet-4-6",
-      max_tokens:1000,
-      system:ctx,
-      messages:apiMessages
-    })
-  })
+  // Construire prompt complet pour Gemini
+  var fullPrompt = ctx + "\n\nQuestion: " + (apiMessages[apiMessages.length-1]&&apiMessages[apiMessages.length-1].content||'');
+  geminiCall(fullPrompt)
   .then(function(r){return r.json();})
   .then(function(data){
     var typing=document.getElementById('ia-typing');
@@ -8923,13 +8824,7 @@ function ficheSetPhoto(input){
         return;
       }
 
-      anthropicCall({
-        model:"claude-sonnet-4-6", max_tokens:1000,
-        messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
-          {type:"text",text:"Analyse cette photo de fiche technique ou recette de cuisine. Reponds UNIQUEMENT en JSON pur sans markdown: {nom, cat (Entree/Plat/Dessert/Sauce/Base/Autre), portions, cout, prix, temps, allergenes, preparation, ingredients:[{nom,qte,unite}]}. Si absent mets null ou valeur vide."}
-        ]}]
-      })
+      geminiCall("Analyse cette photo de fiche technique ou recette de cuisine. Reponds UNIQUEMENT en JSON pur sans markdown: {nom, cat, portions, cout, prix, temps, allergenes, preparation, ingredients:[{nom,qte,unite}]}. Si absent mets null.", b64, "image/jpeg")
       .then(function(data){
         var txt = data.content&&data.content[0] ? data.content[0].text : '';
         txt = txt.replace(/```json|```/g,'').trim();
@@ -9883,20 +9778,20 @@ function renderParametres(){
     wrap.appendChild(pwaBtn);
 
   } else if(paramsTab==='api'){
-    // Clé API Anthropic
+    // Clé API Gemini (Google)
     var apiCard=document.createElement('div');
     apiCard.style.cssText='background:#e8f0ff;border-left:4px solid #1B6FE8;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1B6FE8;line-height:1.6';
-    apiCard.innerHTML='<strong>🤖 Clé API Anthropic</strong><br>Nécessaire pour l\'Assistant IA, le Scanner de recettes et l\'analyse photo DLC.<br>'+
-      '<a href="https://console.anthropic.com/" target="_blank" style="color:#1B6FE8;font-weight:700">Obtenir une clé sur console.anthropic.com →</a>';
+    apiCard.innerHTML='<strong>🤖 Clé API Gemini (Google)</strong><br>Nécessaire pour l\'Assistant IA, le Scanner de recettes et l\'analyse photo DLC.<br>'+
+      '<a href="https://aistudio.google.com/" target="_blank" style="color:#1B6FE8;font-weight:700">Obtenir une clé sur aistudio.google.com →</a>';
     wrap.appendChild(apiCard);
 
     var apiDiv=document.createElement('div');apiDiv.className='ff';
-    var apiLbl=document.createElement('label');apiLbl.textContent='Clé API (sk-ant-...)';apiDiv.appendChild(apiLbl);
+    var apiLbl=document.createElement('label');apiLbl.textContent='Clé API (AIza......)';apiDiv.appendChild(apiLbl);
     var apiInp=document.createElement('input');
     apiInp.type='password';
     apiInp.id='param-api-key';
     apiInp.value=parametresData.anthropicApiKey||'';
-    apiInp.placeholder='sk-ant-api03-...';
+    apiInp.placeholder='AIza...api03-...';
     apiInp.style.cssText='width:100%;padding:11px 14px;border:1.5px solid #dde8c8;border-radius:12px;font-size:14px;font-family:monospace;background:#fff;box-sizing:border-box';
     apiDiv.appendChild(apiInp);
     wrap.appendChild(apiDiv);
@@ -9912,7 +9807,7 @@ function renderParametres(){
     var statutDiv=document.createElement('div');
     var hasKey=!!(parametresData.anthropicApiKey&&parametresData.anthropicApiKey.startsWith('sk-'));
     statutDiv.style.cssText='background:'+(hasKey?'#e8f5e9':'#ffebee')+';border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;font-weight:700;color:'+(hasKey?'#16a34a':'#e53935');
-    statutDiv.textContent=hasKey?'✅ Clé API configurée — IA fonctionnelle':'❌ Aucune clé — IA non disponible';
+    statutDiv.textContent=hasKey?'✅ Clé Gemini configurée — IA fonctionnelle':'❌ Aucune clé — IA non disponible';
     wrap.appendChild(statutDiv);
 
     var saveBtn=document.createElement('button');
@@ -9920,7 +9815,7 @@ function renderParametres(){
     saveBtn.textContent='💾 Sauvegarder la clé';
     saveBtn.onclick=function(){
       var key=document.getElementById('param-api-key').value.trim();
-      if(key&&!key.startsWith('sk-')){showToast('Clé invalide — doit commencer par sk-ant-','error');return;}
+      if(key&&!key.startsWith('AIza') || key.length > 20){showToast('Clé invalide — doit commencer par AIza...','error');return;}
       parametresData.anthropicApiKey=key;
       saveAll();
       showToast(key?'✅ Clé API sauvegardée !':'Clé supprimée','success');
@@ -9936,24 +9831,19 @@ function renderParametres(){
       var key=document.getElementById('param-api-key').value.trim()||parametresData.anthropicApiKey||'';
       if(!key){showToast('Entrez une clé API d\'abord','error');return;}
       testBtn.textContent='⏳ Test en cours...';testBtn.disabled=true;
-      var headers={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
-      if(key) headers["x-api-key"]=key;
-      fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST", signal:(function(){try{var c=new AbortController();setTimeout(function(){c.abort();},45000);return c.signal;}catch(e){return undefined;}})(),
-        headers:headers,
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:10,messages:[{role:"user",content:"Dis juste OK"}]})
-      }).then(function(r){return r.json();}).then(function(d){
+      geminiCall("Réponds juste OK")
+      .then(function(d){
         testBtn.disabled=false;
-        if(d.content&&d.content[0]){
-          testBtn.textContent='✅ Connexion réussie !';
+        if(d&&d.content&&d.content[0]){
+          testBtn.textContent='✅ Connexion Gemini OK !';
           testBtn.style.background='#e8f5e9';testBtn.style.color='#16a34a';testBtn.style.borderColor='#16a34a';
         } else {
-          testBtn.textContent='❌ Erreur: '+(d.error?d.error.message:'Réponse invalide');
+          testBtn.textContent='❌ Clé invalide';
           testBtn.style.color='#e53935';
         }
-      }).catch(function(){
+      }).catch(function(err){
         testBtn.disabled=false;
-        testBtn.textContent='❌ Pas de connexion internet';
+        testBtn.textContent='❌ Erreur: '+(err&&err.message||'Connexion impossible');
         testBtn.style.color='#e53935';
       });
     };
