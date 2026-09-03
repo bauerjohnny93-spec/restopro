@@ -572,6 +572,7 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
 /* Status bar safe area */
 .safe-top { padding-top: env(safe-area-inset-top, 0px); }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -594,6 +595,50 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
         <button onclick="activerAppareil()" style="background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:12px 16px;font-size:14px;font-weight:700;cursor:pointer">Activer</button>
       </div>
       <div id="activation-err" style="font-size:12px;color:#e53935;min-height:18px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIGURATION DE L'APPAREIL (6D-3D) -->
+<div id="appareil-view" style="display:none;background:#1B6FE8;height:100vh;height:100dvh;overflow-y:auto;align-items:center;justify-content:center;padding:20px;padding-top:calc(20px + env(safe-area-inset-top,0px))">
+  <div style="background:#f0fae0;border-radius:28px;padding:28px 22px 30px;width:100%;max-width:360px">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:46px;margin-bottom:10px">🔧</div>
+      <div style="font-size:20px;font-weight:800;color:#1a1a1a">Configurer cet appareil</div>
+      <div style="font-size:13px;color:#888;margin-top:8px;line-height:1.5">
+        Une seule fois par tablette ou téléphone.<br>
+        Utilisez le compte administrateur du restaurant.
+      </div>
+    </div>
+
+    <div class="ff">
+      <label>Email administrateur</label>
+      <input type="email" id="appareil-email" autocomplete="username"
+             placeholder="admin@monrestaurant.fr">
+    </div>
+    <div class="ff">
+      <label>Mot de passe</label>
+      <input type="password" id="appareil-mdp" autocomplete="current-password"
+             placeholder="••••••••">
+    </div>
+
+    <div id="appareil-err" style="min-height:20px;font-size:13px;color:#e53935;font-weight:600;margin:4px 0 10px;line-height:1.4"></div>
+
+    <!-- Choix du restaurant, si le compte en gère plusieurs -->
+    <div id="appareil-choix" style="display:none;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+        Ce compte gère plusieurs restaurants
+      </div>
+      <div id="appareil-choix-liste"></div>
+    </div>
+
+    <button id="appareil-btn" onclick="appareilConfigurer()"
+            style="width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box;min-height:48px">
+      Configurer l'appareil
+    </button>
+
+    <div style="font-size:11px;color:#aaa;text-align:center;margin-top:14px;line-height:1.5">
+      Le mot de passe n'est jamais enregistré sur l'appareil.
     </div>
   </div>
 </div>
@@ -1035,6 +1080,354 @@ function activerAppareil(){
   }
 }
 
+// ════════════════════════════════════════════════════════════
+// AUTHENTIFICATION SERVEUR (6D-3C)
+//
+// L'appareil possède un compte Supabase. Le PIN identifie
+// ENSUITE quel employé s'en sert, via verifier_pin() qui compare
+// le hachage bcrypt dans PostgreSQL.
+//
+// L'ancien système local reste actif en secours : si le serveur
+// n'est pas configuré ou ne répond pas, la connexion se fait
+// comme avant. Aucun PIN n'est retiré du fichier à ce stade.
+// ════════════════════════════════════════════════════════════
+
+// ── À RENSEIGNER pour activer la connexion serveur ──────────
+// Project Settings > API dans Supabase.
+// La clé « anon » est PUBLIQUE par conception : c'est le RLS qui
+// protège les données. Ne jamais mettre ici la clé service_role.
+var SUPABASE_URL  = 'https://tnjleykuagdwttqavqaf.supabase.co';
+var SUPABASE_ANON = 'sb_publishable_CjbxsbwZhSIAdzGkaO4kyg_bkr0Ba5M';
+
+// Correspondance entre les rôles de la base et ceux de l'application
+var ROLES_BASE_VERS_APP = {
+  admin:'Administrateur', responsable:'Responsable',
+  cuisinier:'Cuisinier',  serveur:'Serveur', plongeur:'Plongeur'
+};
+var ROLES_APP_VERS_BASE = {
+  'Administrateur':'admin', 'Responsable':'responsable',
+  'Cuisinier':'cuisinier',  'Serveur':'serveur', 'Plongeur':'plongeur',
+  'Manager':'responsable',        // ancien rôle, converti
+  'Collaborateur':'cuisinier'
+};
+
+// Normalise les rôles hérités. Appelée au démarrage.
+// Ne touche ni à loadAll() ni à saveAll().
+function normaliserRoles(){
+  var n = 0;
+  (usersData||[]).forEach(function(u){
+    if(u.role === 'Manager'){ u.role = 'Responsable'; n++; }
+    else if(u.role === 'Collaborateur'){ u.role = 'Cuisinier'; n++; }
+  });
+  if(n && typeof saveAll === 'function') saveAll();
+  return n;
+}
+
+var Auth = {
+  client: null,
+  restaurantId: null,
+  CLE_SESSION: 'restopro_session',
+  DUREE_SESSION: 12 * 3600 * 1000,   // 12 heures
+
+  // Le serveur est-il configuré et le client disponible ?
+  dispo: function(){
+    if(this.client) return true;
+    if(!SUPABASE_URL || !SUPABASE_ANON) return false;
+    if(typeof supabase === 'undefined' || !supabase.createClient) return false;
+    try {
+      this.client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+      return true;
+    } catch(e){ console.warn('Auth: client indisponible', e); return false; }
+  },
+
+  // Connexion du poste (une fois, à l'installation)
+  connecterAppareil: function(email, motDePasse){
+    if(!this.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configuré'});
+    return this.client.auth.signInWithPassword({email:email, password:motDePasse})
+      .then(function(r){
+        if(r.error) return {ok:false, msg:r.error.message};
+        return {ok:true};
+      })
+      .catch(function(e){ return {ok:false, msg:String(e)}; });
+  },
+
+  deconnecterAppareil: function(){
+    if(!this.dispo()) return Promise.resolve();
+    this.restaurantId = null;
+    return this.client.auth.signOut().catch(function(){});
+  },
+
+  // Le poste est-il connecté au serveur ?
+  appareilConnecte: function(){
+    if(!this.dispo()) return Promise.resolve(false);
+    return this.client.auth.getSession()
+      .then(function(r){ return !!(r && r.data && r.data.session); })
+      .catch(function(){ return false; });
+  },
+
+  // Quel restaurant pour ce poste ? Déduit de son membership.
+  chargerRestaurant: function(){
+    var self = this;
+    if(self.restaurantId) return Promise.resolve(self.restaurantId);
+    if(!self.dispo()) return Promise.resolve(null);
+    return self.client.from('memberships')
+      .select('restaurant_id').eq('actif', true).limit(1)
+      .then(function(r){
+        if(r.error || !r.data || !r.data.length) return null;
+        self.restaurantId = r.data[0].restaurant_id;
+        return self.restaurantId;
+      })
+      .catch(function(){ return null; });
+  },
+
+  // Vérifie un PIN auprès du serveur.
+  // Renvoie {ok:true, user:{name, role}} ou {ok:false, raison:...}
+  verifierPin: function(pin){
+    var self = this;
+    if(!self.dispo()) return Promise.resolve({ok:false, raison:'hors_ligne'});
+    return self.chargerRestaurant().then(function(resto){
+      if(!resto) return {ok:false, raison:'hors_ligne'};
+      return self.client.rpc('verifier_pin',
+        {p_restaurant: resto, p_pin: String(pin)})
+        .then(function(r){
+          if(r.error) return {ok:false, raison:'erreur', msg:r.error.message};
+          if(!r.data || !r.data.length) return {ok:false, raison:'pin_invalide'};
+          var m = r.data[0];
+          return {ok:true, user:{
+            name: m.nom || 'Utilisateur',
+            role: ROLES_BASE_VERS_APP[m.role] || 'Cuisinier',
+            membershipId: m.membership_id
+          }};
+        });
+    }).catch(function(){ return {ok:false, raison:'hors_ligne'}; });
+  },
+
+  // Pose ou change le PIN d'un membre (admin / responsable seulement)
+  definirPin: function(membershipId, pin){
+    if(!this.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configuré'});
+    return this.client.rpc('definir_pin',
+      {p_membership: membershipId, p_pin: String(pin)})
+      .then(function(r){
+        if(r.error) return {ok:false, msg:r.error.message};
+        return {ok:true};
+      })
+      .catch(function(e){ return {ok:false, msg:String(e)}; });
+  },
+
+  // ── Mémoire de l'appareil (jamais le mot de passe) ──────────
+  CLE_APPAREIL: 'restopro_appareil',
+
+  appareilInfos: function(){
+    try { return Storage.get(this.CLE_APPAREIL, null); } catch(e){ return null; }
+  },
+  memoriserAppareil: function(infos){
+    try { Storage.set(this.CLE_APPAREIL, {
+      email: infos.email, restaurantId: infos.restaurantId,
+      restaurantNom: infos.restaurantNom, role: infos.role,
+      enroleLe: new Date().toISOString()
+    }); } catch(e){}
+    this.restaurantId = infos.restaurantId;
+  },
+  oublierAppareil: function(){
+    try { Storage.remove(this.CLE_APPAREIL); } catch(e){}
+    this.restaurantId = null;
+  },
+
+  // Liste les restaurants accessibles au compte connecté.
+  // Renvoie [] si aucun membership actif.
+  mesRestaurants: function(){
+    if(!this.dispo()) return Promise.resolve([]);
+    return this.client.from('memberships')
+      .select('restaurant_id, role, restaurants(nom)')
+      .eq('actif', true)
+      .then(function(r){
+        if(r.error || !r.data) return [];
+        return r.data.map(function(m){
+          return { id: m.restaurant_id, role: m.role,
+                   nom: (m.restaurants && m.restaurants.nom) || 'Restaurant' };
+        });
+      })
+      .catch(function(){ return []; });
+  },
+
+  // ── Session locale : permet de rentrer sans réseau pendant 12 h ──
+  memoriser: function(user, resto){
+    try {
+      Storage.set(this.CLE_SESSION, {
+        name: user.name, role: user.role, resto: resto,
+        expire: Date.now() + this.DUREE_SESSION
+      });
+    } catch(e){}
+  },
+  session: function(){
+    try {
+      var s = Storage.get(this.CLE_SESSION, null);
+      if(s && s.expire && s.expire > Date.now()) return s;
+    } catch(e){}
+    return null;
+  },
+  oublier: function(){
+    try { Storage.remove(this.CLE_SESSION); } catch(e){}
+  }
+};
+
+// ════════════════════════════════════════════════════════════
+// ENRÔLEMENT DE L'APPAREIL (6D-3D)
+// Une seule fois par tablette : email + mot de passe administrateur
+// ouvrent une vraie session Supabase. Le PIN quotidien s'appuie
+// ensuite dessus.
+// ════════════════════════════════════════════════════════════
+
+function appareilAfficherEcran(){
+  ['login-view','resto-view','app-view','module-view','activation-view'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.style.display = 'none';
+  });
+  var av = document.getElementById('appareil-view');
+  if(av){ av.style.display = 'flex'; av.style.flexDirection = 'column'; }
+}
+
+function appareilAfficherPin(){
+  var av = document.getElementById('appareil-view'); if(av) av.style.display = 'none';
+  var lv = document.getElementById('login-view');
+  if(lv){ lv.style.display = 'flex'; }
+  pin = ''; kRefresh();
+}
+
+function appareilErreur(msg){
+  var d = document.getElementById('appareil-err');
+  if(d) d.textContent = msg || '';
+}
+
+function appareilOccupe(actif){
+  var b = document.getElementById('appareil-btn');
+  if(!b) return;
+  b.disabled = !!actif;
+  b.textContent = actif ? 'Connexion en cours…' : "Configurer l'appareil";
+  b.style.opacity = actif ? '.6' : '1';
+}
+
+// Termine l'enrôlement une fois le restaurant déterminé
+function appareilFinaliser(resto, email){
+  Auth.memoriserAppareil({
+    email: email, restaurantId: resto.id,
+    restaurantNom: resto.nom, role: resto.role
+  });
+  appareilErreur('');
+  appareilOccupe(false);
+  var choix = document.getElementById('appareil-choix');
+  if(choix) choix.style.display = 'none';
+  if(typeof showToast === 'function')
+    showToast('Appareil configuré — ' + resto.nom, 'success', 3000);
+  appareilAfficherPin();
+}
+
+// Propose un choix quand le compte gère plusieurs restaurants :
+// on ne décide jamais à la place de l'utilisateur.
+function appareilProposerChoix(restos, email){
+  var zone  = document.getElementById('appareil-choix');
+  var liste = document.getElementById('appareil-choix-liste');
+  if(!zone || !liste) return;
+  liste.innerHTML = '';
+  restos.forEach(function(r){
+    var b = document.createElement('button');
+    b.style.cssText = 'width:100%;background:#fff;border:1.5px solid #1B6FE8;color:#1B6FE8;' +
+      'border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;' +
+      'margin-bottom:8px;box-sizing:border-box;min-height:48px;text-align:left';
+    b.textContent = r.nom + '  ·  ' + r.role;
+    b.onclick = function(){ appareilFinaliser(r, email); };
+    liste.appendChild(b);
+  });
+  zone.style.display = 'block';
+  appareilOccupe(false);
+  appareilErreur('');
+}
+
+function appareilConfigurer(){
+  var email = (document.getElementById('appareil-email').value || '').trim();
+  var mdp   = document.getElementById('appareil-mdp').value || '';
+
+  if(!email || !mdp){ appareilErreur('Renseignez l\'email et le mot de passe.'); return; }
+  if(!Auth.dispo()){
+    appareilErreur('Serveur non configuré : SUPABASE_URL et SUPABASE_ANON sont vides.');
+    return;
+  }
+
+  appareilErreur(''); appareilOccupe(true);
+
+  Auth.connecterAppareil(email, mdp).then(function(r){
+    // Le mot de passe n'est jamais conserve : on vide le champ tout de suite
+    var champ = document.getElementById('appareil-mdp'); if(champ) champ.value = '';
+
+    if(!r.ok){
+      appareilOccupe(false);
+      appareilErreur(r.msg && /Invalid login/i.test(r.msg)
+        ? 'Email ou mot de passe incorrect.'
+        : ('Connexion refusée : ' + (r.msg || 'erreur inconnue')));
+      return;
+    }
+
+    return Auth.mesRestaurants().then(function(restos){
+      if(!restos.length){
+        appareilOccupe(false);
+        appareilErreur('Ce compte n\'est rattaché à aucun restaurant actif. '
+          + 'Créez un membership dans Supabase avant de configurer l\'appareil.');
+        Auth.deconnecterAppareil();   // on ne laisse pas une session inutilisable
+        return;
+      }
+      if(restos.length > 1){ appareilProposerChoix(restos, email); return; }
+      appareilFinaliser(restos[0], email);
+    });
+  }).catch(function(e){
+    appareilOccupe(false);
+    appareilErreur('Serveur injoignable. Vérifiez la connexion internet.');
+  });
+}
+
+// Déconnexion de l'APPAREIL — à ne pas confondre avec kLogout(),
+// qui ne déconnecte que l'employé.
+function appareilDeconnecter(){
+  try { if(typeof saveAll === 'function' && currentResto) saveAll(); } catch(e){}
+  currentUser = ''; currentRole = ''; currentResto = ''; pin = '';
+  Auth.oublier();          // session employé
+  Auth.oublierAppareil();  // mémoire appareil
+  var fin = function(){ appareilAfficherEcran(); };
+  try { Auth.deconnecterAppareil().then(fin, fin); } catch(e){ fin(); }
+}
+
+// Au démarrage : décide quel écran afficher.
+// Une session locale de 12 h ne vaut PAS session serveur.
+function appareilDemarrage(){
+  if(!Auth.dispo()) return;            // serveur non configuré : parcours d'origine
+
+  Auth.appareilConnecte().then(function(connecte){
+    if(!connecte){ appareilAfficherEcran(); return; }
+    var infos = Auth.appareilInfos();
+    if(infos && infos.restaurantId){
+      Auth.restaurantId = infos.restaurantId;   // restaurant retrouvé
+      appareilAfficherPin();
+    } else {
+      // Session valide mais restaurant inconnu : on rejoue la détection
+      Auth.mesRestaurants().then(function(restos){
+        if(restos.length === 1){ appareilFinaliser(restos[0], infos ? infos.email : ''); }
+        else { appareilAfficherEcran(); }
+      });
+    }
+  }).catch(function(){ appareilAfficherEcran(); });
+}
+
+// ── Indicateur visuel pendant l'appel réseau ────────────────
+function kChargement(actif){
+  var d = document.getElementById('pin-err');
+  if(!d) return;
+  if(actif){
+    d.textContent = 'Vérification…';
+    d.style.color = 'rgba(255,255,255,.75)';
+  } else {
+    d.textContent = '';
+    d.style.color = '';
+  }
+}
+
 // ════════════════════════════════
 // PIN
 // ════════════════════════════════
@@ -1055,13 +1448,21 @@ function kRefresh() {
   document.getElementById('pin-err').textContent = '';
 }
 
+var _kTimer = null;
+
 function kPress(n) {
   if (pin.length >= 6) return;
   pin += String(n);
   kRefresh();
-  // Connexion automatique à 4, 5 ou 6 chiffres
-  if(pin.length === 4 || pin.length === 5 || pin.length === 6) {
-    // Vérifier si ce PIN existe
+  if(_kTimer){ clearTimeout(_kTimer); _kTimer = null; }
+  if(pin.length < 4) return;
+
+  if(Auth.dispo()){
+    // Serveur actif : on attend une pause de saisie, sinon un PIN
+    // à 6 chiffres declencherait trois appels reseau successifs.
+    _kTimer = setTimeout(function(){ _kTimer = null; kLogin(); }, 550);
+  } else {
+    // Secours local : comportement d'origine, inchange.
     var found = usersData.find(function(u){ return String(u.pin) === String(pin) && u.actif !== false; });
     if(!found) found = PINS[pin] ? {pin:pin} : null;
     if(found) setTimeout(function(){ kLogin(); }, 200);
@@ -1073,29 +1474,64 @@ function kErase() {
   kRefresh();
 }
 
-function kLogin() {
-  var foundUser = null;
-  // Rôle automatique selon longueur du PIN
-  var autoRole = pin.length === 4 ? 'Collaborateur' : pin.length === 5 ? 'Responsable' : 'Administrateur';
-
+// Recherche locale — ancien mecanisme, conserve comme secours.
+function kLoginLocal(){
+  var autoRole = pin.length === 4 ? 'Cuisinier' : pin.length === 5 ? 'Responsable' : 'Administrateur';
+  var trouve = null;
   for (var i = 0; i < usersData.length; i++) {
     if (String(usersData[i].pin) === String(pin) && usersData[i].actif !== false) {
-      foundUser = {name: usersData[i].nom, role: usersData[i].role || autoRole};
+      trouve = {name: usersData[i].nom, role: usersData[i].role || autoRole};
       break;
     }
   }
-  if (!foundUser) foundUser = PINS[pin];
-  // Si PIN correct par longueur mais pas dans usersData, créer un user temporaire
-  if (!foundUser) {
-    var d = document.getElementById('pin-disp');
-    d.classList.add('shake');
-    document.getElementById('pin-err').textContent = 'Code incorrect. Réessayez.';
-    setTimeout(function() { d.classList.remove('shake'); pin = ''; kRefresh(); }, 800);
-    return;
+  if (!trouve && typeof PINS !== 'undefined') trouve = PINS[pin];
+  if (trouve && !trouve.role) trouve.role = autoRole;
+  // Conversion des roles herites
+  if (trouve && ROLES_APP_VERS_BASE[trouve.role]) {
+    trouve.role = ROLES_BASE_VERS_APP[ROLES_APP_VERS_BASE[trouve.role]] || trouve.role;
   }
+  return trouve;
+}
 
-  // Forcer le rôle selon longueur si pas défini
-  if(!foundUser.role) foundUser.role = autoRole;
+function kLoginEchec(message){
+  kChargement(false);
+  var d = document.getElementById('pin-disp');
+  if(d) d.classList.add('shake');
+  var err = document.getElementById('pin-err');
+  if(err){ err.textContent = message || 'Code incorrect. Reessayez.'; err.style.color = ''; }
+  setTimeout(function(){ if(d) d.classList.remove('shake'); pin = ''; kRefresh(); }, 800);
+}
+
+// Point d'entree : serveur d'abord, secours local ensuite.
+function kLogin() {
+  if(!Auth.dispo()){ kLoginSuite(kLoginLocal()); return; }
+
+  kChargement(true);
+  Auth.verifierPin(pin).then(function(r){
+    kChargement(false);
+    if(r.ok){ kLoginSuite(r.user, true); return; }
+    // Le serveur a repondu « PIN inconnu » : reponse ferme, aucun secours.
+    // Sinon un PIN revoque continuerait de fonctionner.
+    if(r.raison === 'pin_invalide'){ kLoginEchec('Code incorrect. Reessayez.'); return; }
+
+    // Serveur injoignable : secours local, uniquement pendant la transition
+    var local = kLoginLocal();
+    if(local){ kLoginSuite(local); return; }
+    kLoginEchec(Auth.appareilInfos()
+      ? 'Serveur injoignable. Reessayez quand le reseau revient.'
+      : 'Connexion impossible. Verifiez le reseau.');
+  }).catch(function(){
+    kChargement(false);
+    var local = kLoginLocal();
+    if(local) kLoginSuite(local); else kLoginEchec('Connexion impossible.');
+  });
+}
+
+// Suite commune aux deux chemins : renseigne currentUser / currentRole
+// / currentResto exactement comme avant, pour que les 33 modules
+// continuent de fonctionner sans modification.
+function kLoginSuite(foundUser, viaServeur) {
+  if (!foundUser) { kLoginEchec(); return; }
 
   currentUser = foundUser.name;
   var userObj = usersData.find(function(u){ return String(u.pin) === String(pin); });
@@ -1140,6 +1576,8 @@ function choisirRestoAvecUser(foundUser, resto){
   // Sauvegarder l'état courant avant de basculer, puis recloisonner
   try { if(typeof saveAll === 'function' && currentResto) saveAll(); } catch(e){}
   currentResto = resto;
+  // Memoriser la session 12 h : permet de rentrer sans reseau
+  try { if(typeof Auth !== 'undefined') Auth.memoriser(foundUser, resto); } catch(e){}
   if(typeof restoAppliquerCloisonnement === 'function') restoAppliquerCloisonnement();
   var av = document.getElementById('app-view');
   av.style.display = 'flex';
@@ -1154,13 +1592,25 @@ function choisirRestoAvecUser(foundUser, resto){
   setTimeout(function(){checkAllAlerts();checkAllAlertsFull();}, 600);
 }
 
+// Deconnexion de l'EMPLOYE : retour a l'ecran PIN.
+// L'appareil reste connecte a Supabase — voir appareilDeconnecter().
 function kLogout() {
+  // Sauvegarder avant de quitter, sinon les saisies en cours sont perdues
+  try { if(typeof saveAll === 'function' && currentResto) saveAll(); } catch(e){}
+
   pin = '';
+  currentUser  = '';          // etait oublie : la session restait identifiee
   currentResto = '';
-  currentRole = '';
+  currentRole  = '';
+  try { if(typeof Auth !== 'undefined') Auth.oublier(); } catch(e){}
+
   kRefresh();
+  try { if(typeof kChargement === 'function') kChargement(false); } catch(e){}
+
   document.getElementById('app-view').style.display = 'none';
-  var rv=document.getElementById('resto-view');if(rv)rv.style.display='none';
+  var rv=document.getElementById('resto-view');
+  if(rv){ rv.style.display='none'; rv._user = null; }
+  var mv=document.getElementById('mod-view'); if(mv) mv.style.display='none';
   document.getElementById('login-view').style.display = 'flex';
 }
 
@@ -12000,6 +12450,11 @@ function restoAttribuerNonAttribuees(cible){
 
 loadAll();
 restoAppliquerCloisonnement();
+// Conversion des roles herites (Manager -> Responsable) ; n'ecrit
+// que si une conversion a reellement eu lieu.
+try { normaliserRoles(); } catch(e){}
+// Choix de l'ecran de depart : configuration appareil ou saisie du PIN
+try { appareilDemarrage(); } catch(e){ console.warn('demarrage appareil', e); }
 
 
 function lancerOnboarding(){
@@ -12348,6 +12803,43 @@ function relancerOnboarding(){
 
 
 function adminRenderSysteme(parent){
+  // ── État de l'appareil (6D-3D) ──
+  (function(){
+    var t=document.createElement('div');
+    t.style.cssText='font-size:var(--font-xs);font-weight:var(--font-weight-black);color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px';
+    t.textContent='🔧 CET APPAREIL';
+    parent.appendChild(t);
+
+    var infos = (typeof Auth!=='undefined') ? Auth.appareilInfos() : null;
+    var carte=document.createElement('div');
+    carte.style.cssText='background:'+(infos?'var(--success-light)':'var(--neutral-light)')+
+      ';border-radius:var(--radius);padding:14px;margin-bottom:14px';
+
+    if(infos){
+      carte.innerHTML=
+        '<div style="font-size:var(--font-base);font-weight:var(--font-weight-bold);color:var(--success-dark);margin-bottom:6px">✅ Connecté au serveur</div>'+
+        '<div style="font-size:var(--font-sm);color:var(--text-secondary);line-height:1.7">'+
+          'Restaurant : <strong>'+(infos.restaurantNom||'—')+'</strong><br>'+
+          'Compte : '+(infos.email||'—')+'<br>'+
+          'Configuré le '+((infos.enroleLe||'').split('T')[0]||'—')+
+        '</div>';
+      var b=document.createElement('button');
+      b.style.cssText='width:100%;background:var(--danger-light);color:var(--danger);border:none;border-radius:var(--radius-sm);padding:11px;font-size:var(--font-sm);font-weight:var(--font-weight-bold);cursor:pointer;margin-top:10px;min-height:44px;box-sizing:border-box';
+      b.textContent='Déconnecter cet appareil du serveur';
+      b.onclick=function(){
+        if(typeof appareilDeconnecter==='function') appareilDeconnecter();
+      };
+      carte.appendChild(b);
+    } else {
+      carte.innerHTML=
+        '<div style="font-size:var(--font-base);font-weight:var(--font-weight-bold);color:var(--text-secondary);margin-bottom:6px">Mode local</div>'+
+        '<div style="font-size:var(--font-sm);color:var(--text-muted);line-height:1.6">'+
+          'Cet appareil n\'est pas relié au serveur. Les données restent sur ce téléphone ou cette tablette.'+
+        '</div>';
+    }
+    parent.appendChild(carte);
+  })();
+
   // ── Données historiques sans rattachement à un restaurant ──
   var na = restoCompterNonAttribuees();
   if(na.total > 0){
