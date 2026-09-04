@@ -1508,8 +1508,11 @@ function kPress(n) {
 
   if(Auth.dispo()){
     // Serveur actif : on attend une pause de saisie, sinon un PIN
-    // à 6 chiffres declencherait trois appels reseau successifs.
-    _kTimer = setTimeout(function(){ _kTimer = null; kLogin(); }, 550);
+    // a 6 chiffres declencherait trois appels reseau successifs.
+    // 1,5 s laisse le temps de composer un PIN a 5 ou 6 chiffres ;
+    // chaque nouvelle touche relance le compte a rebours.
+    // Le bouton OK, lui, declenche la verification immediatement.
+    _kTimer = setTimeout(function(){ _kTimer = null; kLogin(); }, 1500);
   } else {
     // Secours local : comportement d'origine, inchange.
     var found = usersData.find(function(u){ return String(u.pin) === String(pin) && u.actif !== false; });
