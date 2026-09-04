@@ -1148,7 +1148,7 @@ var Auth = {
         if(r.error) return {ok:false, msg:r.error.message};
         return {ok:true};
       })
-      .catch(function(e){ return {ok:false, msg:String(e)}; });
+      .catch(function(e){ return {ok:false, reseau:true, msg:String(e)}; });
   },
 
   deconnecterAppareil: function(){
@@ -1202,6 +1202,28 @@ var Auth = {
     }).catch(function(){ return {ok:false, raison:'hors_ligne'}; });
   },
 
+  // Cree la ligne « employe » dans memberships et renvoie son id.
+  // user_id NULL : cet employe n'a pas de compte Supabase, il sera
+  // identifie par son PIN seul (voir restopro_membres.sql).
+  creerMembership: function(nom, roleApp){
+    var self = this;
+    if(!self.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configure'});
+    var infos = self.appareilInfos();
+    if(!infos || !infos.restaurantId)
+      return Promise.resolve({ok:false, msg:'Appareil non enrole'});
+    return self.client.from('memberships')
+      .insert({ user_id: null, restaurant_id: infos.restaurantId,
+                nom: nom, role: (ROLES_APP_VERS_BASE[roleApp] || 'cuisinier'),
+                actif: true })
+      .select('id')
+      .then(function(r){
+        if(r.error) return {ok:false, msg:r.error.message};
+        if(!r.data || !r.data.length) return {ok:false, msg:'Creation refusee'};
+        return {ok:true, id:r.data[0].id};
+      })
+      .catch(function(e){ return {ok:false, reseau:true, msg:String(e)}; });
+  },
+
   // Pose ou change le PIN d'un membre (admin / responsable seulement)
   definirPin: function(membershipId, pin){
     if(!this.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configuré'});
@@ -1211,7 +1233,7 @@ var Auth = {
         if(r.error) return {ok:false, msg:r.error.message};
         return {ok:true};
       })
-      .catch(function(e){ return {ok:false, msg:String(e)}; });
+      .catch(function(e){ return {ok:false, reseau:true, msg:String(e)}; });
   },
 
   // ── Mémoire de l'appareil (jamais le mot de passe) ──────────
@@ -12303,26 +12325,105 @@ function adminOuvrirFormMembre(userExistant){
     var nom=document.getElementById('adm-nom').value.trim();
     var role=document.getElementById('adm-role').value;
     var poste=document.getElementById('adm-poste').value;
-    var pin=document.getElementById('adm-pin').value.trim();
+    // Le PIN reste une CHAINE : parseInt() detruisait les PIN
+    // commencant par zero (0456 devenait 456, donc inutilisable).
+    var pin=String(document.getElementById('adm-pin').value).trim();
     var actif=document.getElementById('adm-actif').checked;
     var restoChks=document.querySelectorAll('.adm-resto-chk');
     var restos=[];restoChks.forEach(function(c){if(c.checked)restos.push(c.value);});
     if(!restos.length){showToast('Choisissez au moins un établissement','error');return;}
     if(!nom){showToast('Entrez un nom','error');return;}
-    if(!pin||pin.length<4||pin.length>6||isNaN(pin)){showToast('PIN invalide (4 a 6 chiffres)','error');return;}
-    var pinConflict=(usersData||[]).find(function(u){return String(u.pin)===String(pin)&&(!isEdit||u.id!==userExistant.id);});
-    if(pinConflict){showToast('Ce PIN est deja utilise par '+pinConflict.nom,'error');return;}
-    if(isEdit){
-      var idx=(usersData||[]).findIndex(function(u){return u.id===userExistant.id;});
-      if(idx>=0){usersData[idx].nom=nom;usersData[idx].role=role;usersData[idx].poste=poste;usersData[idx].pin=parseInt(pin);usersData[idx].actif=actif;usersData[idx].restos=restos;usersData[idx].resto=restos[0];}
-      auditEnregistrer('admin','Membre modifie',nom,'Administration');
-      showToast('Membre modifie !','success');
-    } else {
-      usersData.push({id:Date.now(),nom:nom,role:role,poste:poste,pin:parseInt(pin),actif:actif,restos:restos,resto:restos[0],avatar:'',creeLe:new Date().toISOString().split('T')[0]});
-      auditEnregistrer('admin','Membre ajoute',nom+' ('+role+')','Administration');
-      showToast(nom+' ajoute !','success',3000);
+    // Validation par expression reguliere : isNaN() acceptait
+    // « 12.5 » ou « 1e4 », qui ne sont pas des PIN valides.
+    if(!/^[0-9]{4,6}$/.test(pin)){showToast('PIN invalide (4 a 6 chiffres)','error');return;}
+
+    // Ecriture locale : conserve le fonctionnement hors ligne.
+    // « pinSync » indique si le serveur connait ce PIN.
+    function enregistrerLocal(pinSync, membershipId){
+      if(isEdit){
+        var idx=(usersData||[]).findIndex(function(u){return u.id===userExistant.id;});
+        if(idx>=0){
+          usersData[idx].nom=nom; usersData[idx].role=role; usersData[idx].poste=poste;
+          usersData[idx].pin=pin;                 // chaine, jamais parseInt
+          usersData[idx].actif=actif; usersData[idx].restos=restos; usersData[idx].resto=restos[0];
+          usersData[idx].pinSync=!!pinSync;
+          if(membershipId) usersData[idx].membershipId=membershipId;
+        }
+        auditEnregistrer('admin','Membre modifie',nom+(pinSync?' (PIN serveur)':' (PIN local)'),'Administration');
+      } else {
+        var nouveau={id:Date.now(),nom:nom,role:role,poste:poste,pin:pin,actif:actif,
+          restos:restos,resto:restos[0],avatar:'',pinSync:!!pinSync,
+          creeLe:new Date().toISOString().split('T')[0]};
+        if(membershipId) nouveau.membershipId=membershipId;
+        usersData.push(nouveau);
+        auditEnregistrer('admin','Membre ajoute',nom+' ('+role+')'+(pinSync?' (PIN serveur)':' (PIN local)'),'Administration');
+      }
+      saveAll(); ov.remove(); renderAdministration();
     }
-    saveAll();ov.remove();renderAdministration();
+
+    var appareil=(typeof Auth!=='undefined') ? Auth.appareilInfos() : null;
+    var serveurPret=(typeof Auth!=='undefined') && Auth.dispo() && appareil && appareil.restaurantId;
+
+    // ── Sans serveur : mecanisme d'origine, avec controle local du doublon ──
+    if(!serveurPret){
+      var conflit=(usersData||[]).find(function(u){
+        return String(u.pin)===String(pin)&&(!isEdit||u.id!==userExistant.id);});
+      if(conflit){showToast('Ce PIN est deja utilise par '+conflit.nom,'error');return;}
+      enregistrerLocal(false, isEdit?userExistant.membershipId:null);
+      showToast(isEdit?'Membre modifie !':(nom+' ajoute !'),'success',3000);
+      return;
+    }
+
+    // ── Avec serveur : le PIN est pose par PostgreSQL ──
+    // Le controle de doublon est delegue a definir_pin(), qui le fait
+    // sous verrou, sur l'ensemble du restaurant et non sur les seules
+    // donnees presentes dans ce navigateur.
+    sv.disabled=true; sv.textContent='Enregistrement…';
+    var reactiver=function(){ sv.disabled=false; sv.textContent=isEdit?'Modifier':'Creer le membre'; };
+
+    var obtenirMembership;
+    if(isEdit && userExistant.membershipId){
+      obtenirMembership=Promise.resolve({ok:true,id:userExistant.membershipId});
+    } else {
+      obtenirMembership=Auth.creerMembership(nom, role);
+    }
+
+    // Panne reseau : on retombe sur le mecanisme local, comme avant.
+    // Un REFUS du serveur, lui, n'est jamais contourne.
+    function replierEnLocal(){
+      var conflit=(usersData||[]).find(function(u){
+        return String(u.pin)===String(pin)&&(!isEdit||u.id!==userExistant.id);});
+      if(conflit){ showToast('Ce PIN est deja utilise par '+conflit.nom,'error'); return; }
+      enregistrerLocal(false, isEdit?userExistant.membershipId:null);
+      showToast('Serveur injoignable — enregistre en local seulement','warning',5000);
+    }
+
+    obtenirMembership.then(function(m){
+      if(!m.ok){
+        reactiver();
+        if(m.reseau){ replierEnLocal(); return; }
+        showToast('Serveur : '+(m.msg||'creation impossible'),'error',5000);
+        return;
+      }
+      return Auth.definirPin(m.id, pin).then(function(r){
+        reactiver();
+        if(!r.ok){
+          if(r.reseau){ replierEnLocal(); return; }
+          // Refus explicite : on n'ecrit rien, l'interface ne doit pas
+          // laisser croire que le PIN a ete synchronise.
+          var msg=r.msg||'';
+          if(/deja utilise/i.test(msg)) showToast('Ce PIN est deja utilise dans ce restaurant','error',5000);
+          else if(/Droits insuffisants/i.test(msg)) showToast('Droits insuffisants sur ce restaurant','error',5000);
+          else showToast('PIN non enregistre : '+msg,'error',5000);
+          return;
+        }
+        enregistrerLocal(true, m.id);
+        showToast(isEdit?'Membre modifie — PIN synchronise':(nom+' ajoute — PIN synchronise'),'success',3000);
+      });
+    }).catch(function(){
+      reactiver();
+      replierEnLocal();
+    });
   };
   var cn=document.createElement('button');
   cn.style.cssText='background:#f0fae0;color:#888;border:1.5px solid #dde8c8;border-radius:14px;padding:15px;font-size:14px;cursor:pointer;min-width:80px';
