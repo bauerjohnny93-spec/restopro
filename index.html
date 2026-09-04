@@ -1233,21 +1233,38 @@ var Auth = {
     this.restaurantId = null;
   },
 
-  // Liste les restaurants accessibles au compte connecté.
+  // Liste les restaurants du COMPTE CONNECTE lui-meme.
   // Renvoie [] si aucun membership actif.
+  //
+  // Le filtre sur user_id est indispensable : la policy RLS
+  // memb_select autorise « user_id = auth.uid() OR est_membre(restaurant_id) ».
+  // Le second terme laisse voir les memberships des collegues du meme
+  // restaurant — utile ailleurs, mais ici cela faisait remonter les
+  // employes identifies par PIN (user_id NULL) comme s'il s'agissait
+  // de restaurants de l'appareil.
+  //
+  // L'identifiant vient de getUser(), qui fait valider le jeton par le
+  // serveur : il n'est pas fourni ni modifiable par le navigateur.
+  // Filtrer sur user_id exclut aussi, par construction, toutes les
+  // lignes ou user_id est NULL.
   mesRestaurants: function(){
-    if(!this.dispo()) return Promise.resolve([]);
-    return this.client.from('memberships')
-      .select('restaurant_id, role, restaurants(nom)')
-      .eq('actif', true)
-      .then(function(r){
-        if(r.error || !r.data) return [];
-        return r.data.map(function(m){
-          return { id: m.restaurant_id, role: m.role,
-                   nom: (m.restaurants && m.restaurants.nom) || 'Restaurant' };
+    var self = this;
+    if(!self.dispo()) return Promise.resolve([]);
+    return self.client.auth.getUser().then(function(u){
+      var uid = u && u.data && u.data.user ? u.data.user.id : null;
+      if(!uid) return [];
+      return self.client.from('memberships')
+        .select('restaurant_id, role, restaurants(nom)')
+        .eq('user_id', uid)
+        .eq('actif', true)
+        .then(function(r){
+          if(r.error || !r.data) return [];
+          return r.data.map(function(m){
+            return { id: m.restaurant_id, role: m.role,
+                     nom: (m.restaurants && m.restaurants.nom) || 'Restaurant' };
+          });
         });
-      })
-      .catch(function(){ return []; });
+    }).catch(function(){ return []; });
   },
 
   // ── Session locale : permet de rentrer sans réseau pendant 12 h ──
