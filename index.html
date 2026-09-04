@@ -1224,6 +1224,7 @@ var Auth = {
     try { Storage.set(this.CLE_APPAREIL, {
       email: infos.email, restaurantId: infos.restaurantId,
       restaurantNom: infos.restaurantNom, role: infos.role,
+      restoLocal: infos.restoLocal || 'resto1',
       enroleLe: new Date().toISOString()
     }); } catch(e){}
     this.restaurantId = infos.restaurantId;
@@ -1325,9 +1326,18 @@ function appareilOccupe(actif){
 
 // Termine l'enrôlement une fois le restaurant déterminé
 function appareilFinaliser(resto, email){
+  // L'application raisonne en emplacements locaux ('resto1' / 'resto2'),
+  // utilises par le cloisonnement 6A et par une douzaine de modules.
+  // Le restaurant Supabase est un UUID : on le rattache donc a un
+  // emplacement local, fixe une fois pour toutes a l'enrolement.
+  // Un emplacement deja choisi n'est jamais ecrase.
+  var precedent = Auth.appareilInfos();
+  var emplacement = (precedent && precedent.restoLocal) ? precedent.restoLocal : 'resto1';
+
   Auth.memoriserAppareil({
     email: email, restaurantId: resto.id,
-    restaurantNom: resto.nom, role: resto.role
+    restaurantNom: resto.nom, role: resto.role,
+    restoLocal: emplacement
   });
   appareilErreur('');
   appareilOccupe(false);
@@ -1551,13 +1561,33 @@ function kLoginSuite(foundUser, viaServeur) {
   if (!foundUser) { kLoginEchec(); return; }
 
   currentUser = foundUser.name;
-  var userObj = usersData.find(function(u){ return String(u.pin) === String(pin); });
-  var restoFixe = userObj && userObj.resto && userObj.resto !== '' && userObj.resto !== 'tous' ? userObj.resto : null;
+  var restoFixe = null;
 
-  // Si l'user est assigné à plusieurs restos, montrer le choix
-  if(userObj && userObj.restos && userObj.restos.length > 1) restoFixe = null;
+  if (viaServeur) {
+    // Connexion serveur : le restaurant est celui auquel l'appareil a ete
+    // rattache lors de l'enrolement. On ne le cherche PAS dans usersData,
+    // ou le PIN serveur n'existe pas — c'est ce qui faisait reapparaitre
+    // l'ancien ecran de choix.
+    var app = (typeof Auth !== 'undefined') ? Auth.appareilInfos() : null;
+    restoFixe = (app && app.restoLocal) ? app.restoLocal : 'resto1';
+  } else {
+    // Secours local : mecanisme d'origine, inchange.
+    var userObj = usersData.find(function(u){ return String(u.pin) === String(pin); });
+    restoFixe = userObj && userObj.resto && userObj.resto !== '' && userObj.resto !== 'tous' ? userObj.resto : null;
+    if(userObj && userObj.restos && userObj.restos.length > 1) restoFixe = null;
+  }
 
   document.getElementById('login-view').style.display = 'none';
+
+  // Connexion serveur : le nom du restaurant vient de Supabase, pour que
+  // l'utilisateur voie le vrai etablissement et non « Resto 1 ».
+  if (viaServeur) {
+    var appInf = (typeof Auth !== 'undefined') ? Auth.appareilInfos() : null;
+    if (appInf && appInf.restaurantNom && parametresData) {
+      if (appInf.restoLocal === 'resto2') parametresData.nomResto2 = appInf.restaurantNom;
+      else                                parametresData.nomResto1 = appInf.restaurantNom;
+    }
+  }
 
   // Mettre à jour les noms des restos sur l'écran de sélection
   var n1 = (parametresData&&parametresData.nomResto1)||'Resto 1';
