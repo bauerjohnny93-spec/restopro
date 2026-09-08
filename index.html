@@ -1170,14 +1170,33 @@ var Auth = {
     var self = this;
     if(self.restaurantId) return Promise.resolve(self.restaurantId);
     if(!self.dispo()) return Promise.resolve(null);
-    return self.client.from('memberships')
-      .select('restaurant_id').eq('actif', true).limit(1)
-      .then(function(r){
-        if(r.error || !r.data || !r.data.length) return null;
-        self.restaurantId = r.data[0].restaurant_id;
-        return self.restaurantId;
-      })
-      .catch(function(){ return null; });
+
+    // 1) Le restaurant retenu lors de l'enrolement fait foi. Cela evite
+    //    un aller-retour reseau sur la toute premiere saisie de PIN.
+    var infos = self.appareilInfos();
+    if(infos && infos.restaurantId){
+      self.restaurantId = infos.restaurantId;
+      return Promise.resolve(self.restaurantId);
+    }
+
+    // 2) A defaut, interroger le membership DU COMPTE CONNECTE.
+    //    Le filtre user_id est indispensable : la policy RLS laisse voir
+    //    les memberships des collegues, y compris les employes dont
+    //    user_id vaut NULL. Filtrer sur user_id les exclut par construction.
+    return self.client.auth.getUser().then(function(u){
+      var uid = u && u.data && u.data.user ? u.data.user.id : null;
+      if(!uid) return null;
+      return self.client.from('memberships')
+        .select('restaurant_id')
+        .eq('user_id', uid)
+        .eq('actif', true)
+        .limit(1)
+        .then(function(r){
+          if(r.error || !r.data || !r.data.length) return null;
+          self.restaurantId = r.data[0].restaurant_id;
+          return self.restaurantId;
+        });
+    }).catch(function(){ return null; });
   },
 
   // Vérifie un PIN auprès du serveur.
@@ -1221,6 +1240,17 @@ var Auth = {
         if(!r.data || !r.data.length) return {ok:false, msg:'Creation refusee'};
         return {ok:true, id:r.data[0].id};
       })
+      .catch(function(e){ return {ok:false, reseau:true, msg:String(e)}; });
+  },
+
+  // Supprime un membership. Sert uniquement a annuler une creation
+  // dont le PIN n'a pas pu etre pose : sans cela on laisserait en base
+  // un employe sans pin_hash, incapable de se connecter et visible
+  // dans les listes du restaurant.
+  supprimerMembership: function(membershipId){
+    if(!this.dispo()) return Promise.resolve({ok:false});
+    return this.client.from('memberships').delete().eq('id', membershipId)
+      .then(function(r){ return {ok: !r.error, msg: r.error ? r.error.message : null}; })
       .catch(function(e){ return {ok:false, reseau:true, msg:String(e)}; });
   },
 
@@ -1330,6 +1360,15 @@ function appareilAfficherPin(){
   var av = document.getElementById('appareil-view'); if(av) av.style.display = 'none';
   var lv = document.getElementById('login-view');
   if(lv){ lv.style.display = 'flex'; }
+
+  // L'ecran PIN est visible des le chargement : l'utilisateur peut avoir
+  // commence a taper avant que appareilDemarrage() ait recu la reponse
+  // du serveur. Effacer ici lui ferait perdre sa saisie — c'etait la
+  // cause des refus au premier essai.
+  // On ne teste pas la visibilite : login-view n'a pas de « display »
+  // en ligne, sa visibilite vient de la feuille de style. On se fie
+  // donc a la saisie elle-meme.
+  if(pin){ kRefresh(); return; }   // saisie en cours : on n'y touche pas
   pin = ''; kRefresh();
 }
 
@@ -1445,7 +1484,14 @@ function appareilDeconnecter(){
 
 // Au démarrage : décide quel écran afficher.
 // Une session locale de 12 h ne vaut PAS session serveur.
+var _appareilDemarrageFait = false;
+
 function appareilDemarrage(){
+  // getSession() part sur le reseau : sans verrou, deux appels
+  // concurrents lancent deux fois appareilAfficherPin().
+  if(_appareilDemarrageFait) return;
+  _appareilDemarrageFait = true;
+
   if(!Auth.dispo()) return;            // serveur non configuré : parcours d'origine
 
   Auth.appareilConnecte().then(function(connecte){
@@ -1498,6 +1544,11 @@ function kRefresh() {
 }
 
 var _kTimer = null;
+// Verrou : empeche qu'une seconde verification parte pendant qu'une
+// premiere est en cours. Sans lui, la temporisation de 1500 ms et le
+// bouton OK lancaient chacun leur appel a verifier_pin, consommant
+// deux fois le quota anti-force-brute pour une seule saisie.
+var _kVerifEnCours = false;
 
 function kPress(n) {
   if (pin.length >= 6) return;
@@ -1546,6 +1597,7 @@ function kLoginLocal(){
 }
 
 function kLoginEchec(message){
+  _kVerifEnCours = false;   // securite : aucun chemin d'erreur ne doit laisser le verrou pose
   kChargement(false);
   var d = document.getElementById('pin-disp');
   if(d) d.classList.add('shake');
@@ -1556,10 +1608,17 @@ function kLoginEchec(message){
 
 // Point d'entree : serveur d'abord, secours local ensuite.
 function kLogin() {
+  // Une verification est deja en route : ne pas en lancer une seconde.
+  if(_kVerifEnCours) return;
+  // Le bouton OK annule l'attente en cours au lieu de s'y ajouter.
+  if(_kTimer){ clearTimeout(_kTimer); _kTimer = null; }
+
   if(!Auth.dispo()){ kLoginSuite(kLoginLocal()); return; }
 
+  _kVerifEnCours = true;
   kChargement(true);
   Auth.verifierPin(pin).then(function(r){
+    _kVerifEnCours = false;
     kChargement(false);
     if(r.ok){ kLoginSuite(r.user, true); return; }
     // Le serveur a repondu « PIN inconnu » : reponse ferme, aucun secours.
@@ -1573,6 +1632,7 @@ function kLogin() {
       ? 'Serveur injoignable. Reessayez quand le reseau revient.'
       : 'Connexion impossible. Verifiez le reseau.');
   }).catch(function(){
+    _kVerifEnCours = false;
     kChargement(false);
     var local = kLoginLocal();
     if(local) kLoginSuite(local); else kLoginEchec('Connexion impossible.');
@@ -12384,10 +12444,14 @@ function adminOuvrirFormMembre(userExistant){
     sv.disabled=true; sv.textContent='Enregistrement…';
     var reactiver=function(){ sv.disabled=false; sv.textContent=isEdit?'Modifier':'Creer le membre'; };
 
+    // On distingue un membership PREEXISTANT d'un membership CREE a
+    // l'instant : seul le second doit etre annule si le PIN echoue.
+    var membershipNouveau = false;
     var obtenirMembership;
     if(isEdit && userExistant.membershipId){
       obtenirMembership=Promise.resolve({ok:true,id:userExistant.membershipId});
     } else {
+      membershipNouveau = true;
       obtenirMembership=Auth.creerMembership(nom, role);
     }
 
@@ -12411,10 +12475,20 @@ function adminOuvrirFormMembre(userExistant){
       return Auth.definirPin(m.id, pin).then(function(r){
         reactiver();
         if(!r.ok){
+          var msg=r.msg||'';
+
+          // Le membership vient d'etre cree mais son PIN n'a pas pu etre
+          // pose : on annule la creation pour ne pas laisser en base une
+          // fiche sans PIN, inutilisable et trompeuse dans les listes.
+          if(membershipNouveau){
+            Auth.supprimerMembership(m.id).then(function(sup){
+              if(!sup.ok) console.warn('membership orphelin non supprime :', m.id, sup.msg);
+            });
+          }
+
           if(r.reseau){ replierEnLocal(); return; }
           // Refus explicite : on n'ecrit rien, l'interface ne doit pas
           // laisser croire que le PIN a ete synchronise.
-          var msg=r.msg||'';
           if(/deja utilise/i.test(msg)) showToast('Ce PIN est deja utilise dans ce restaurant','error',5000);
           else if(/Droits insuffisants/i.test(msg)) showToast('Droits insuffisants sur ce restaurant','error',5000);
           else showToast('PIN non enregistre : '+msg,'error',5000);
@@ -12890,29 +12964,37 @@ function onboardingValiderStep(step){
   }
 
   if(step.id === 'equipe'){
-    // Récupérer les employés saisis
+    // Recuperer les employes saisis, puis les creer un a un.
+    // Le traitement est asynchrone : on n'avance a l'etape suivante
+    // qu'une fois tous les PIN poses et affiches a l'administrateur.
     var empList = document.getElementById('ob-equipe-list');
+    var aCreer = [];
     if(empList){
       var rows = empList.querySelectorAll('div[style*="display:flex"]');
       rows.forEach(function(row, i){
         var nomInp = document.getElementById('ob-emp-nom-'+i);
         var roleInp = document.getElementById('ob-emp-role-'+i);
-        if(nomInp&&nomInp.value.trim()){
+        if(nomInp && nomInp.value.trim()){
           var empNom = nomInp.value.trim();
-          var empRole = roleInp?roleInp.value:'Serveur';
-          var existing = usersData.find(function(u){return u.nom===empNom;});
-          if(!existing){
-            var newPin = String(Math.floor(1000+Math.random()*9000));
-            usersData.push({
-              id: Date.now()+i, nom: empNom, role: empRole,
-              pin: newPin, actif: true, poste:'—', resto:'resto1'
-            });
+          if(!usersData.find(function(u){return u.nom===empNom;})){
+            aCreer.push({nom: empNom, role: roleInp ? roleInp.value : 'Serveur', index: i});
           }
         }
       });
     }
-    auditEnregistrer('system','Onboarding: équipe configurée', usersData.length+' membre(s)', 'Onboarding');
-    showToast('✅ Équipe configurée !', 'success');
+
+    obCreerEquipe(aCreer).then(function(resultats){
+      auditEnregistrer('system','Onboarding: équipe configurée',
+                       usersData.length+' membre(s)', 'Onboarding');
+      // Les PIN doivent etre montres : sans cela l'employe ne peut pas
+      // se connecter. C'etait le defaut du code precedent.
+      obAfficherPins(resultats, function(){
+        saveAll();
+        onboardingStep++;
+        afficherStepOnboarding();
+      });
+    });
+    return;   // la suite est reprise dans le rappel ci-dessus
   }
 
   if(step.id === 'fournisseurs'){
@@ -12925,6 +13007,145 @@ function onboardingValiderStep(step){
   saveAll();
   onboardingStep++;
   afficherStepOnboarding();
+}
+
+// ════════════════════════════════════════════════════════════
+// ONBOARDING — création des employés (6D-3E-C)
+// ════════════════════════════════════════════════════════════
+
+// Tire un PIN a 4 chiffres non utilise localement.
+// Le serveur reste l'arbitre final : definir_pin() refuse les
+// doublons sur l'ensemble du restaurant, pas seulement sur les
+// donnees presentes dans ce navigateur.
+function obGenererPin(dejaPris){
+  for(var essai = 0; essai < 40; essai++){
+    var p = String(Math.floor(1000 + Math.random() * 9000));
+    var prisLocal = (usersData||[]).some(function(u){ return String(u.pin) === p; });
+    if(!prisLocal && dejaPris.indexOf(p) < 0) return p;
+  }
+  return null;   // improbable : 9000 combinaisons
+}
+
+// Cree les employes un par un. Renvoie la liste des PIN attribues,
+// pour qu'ils puissent etre communiques a l'administrateur.
+function obCreerEquipe(liste){
+  var resultats = [];
+  var attribues = [];
+
+  function suivant(i){
+    if(i >= liste.length) return Promise.resolve(resultats);
+    var emp = liste[i];
+    var pin = obGenererPin(attribues);
+    if(!pin){
+      resultats.push({nom: emp.nom, role: emp.role, pin: null, sync: false,
+                      erreur: 'Aucun PIN disponible'});
+      return suivant(i + 1);
+    }
+    attribues.push(pin);
+
+    // Emplacement local du restaurant : celui de l'appareil s'il est
+    // enrole, sinon resto1 comme auparavant.
+    var appareil = (typeof Auth !== 'undefined') ? Auth.appareilInfos() : null;
+    var emplacement = (appareil && appareil.restoLocal) ? appareil.restoLocal : 'resto1';
+
+    function enregistrer(sync, membershipId, erreur){
+      var fiche = {
+        id: Date.now() + i, nom: emp.nom, role: emp.role,
+        pin: pin,                 // chaine, conserve pour le secours local
+        actif: true, poste: '—',
+        resto: emplacement, restos: [emplacement],
+        pinSync: !!sync,
+        creeLe: new Date().toISOString().split('T')[0]
+      };
+      if(membershipId) fiche.membershipId = membershipId;
+      usersData.push(fiche);
+      resultats.push({nom: emp.nom, role: emp.role, pin: pin,
+                      sync: !!sync, erreur: erreur || null});
+      return suivant(i + 1);
+    }
+
+    var serveurPret = (typeof Auth !== 'undefined') && Auth.dispo()
+                      && appareil && appareil.restaurantId;
+    if(!serveurPret) return enregistrer(false, null, null);
+
+    // user_id reste NULL : l'employe n'a pas de compte Supabase,
+    // il est identifie par son PIN seul.
+    return Auth.creerMembership(emp.nom, emp.role).then(function(m){
+      if(!m.ok) return enregistrer(false, null, m.msg || 'Creation refusee');
+      return Auth.definirPin(m.id, pin).then(function(r){
+        if(r.ok) return enregistrer(true, m.id, null);
+        // PIN refuse : on annule la creation pour ne pas laisser
+        // en base une fiche sans pin_hash.
+        Auth.supprimerMembership(m.id).then(function(){});
+        return enregistrer(false, null, r.msg || 'PIN non enregistre');
+      });
+    }).catch(function(){
+      return enregistrer(false, null, 'Serveur injoignable');
+    });
+  }
+
+  return suivant(0);
+}
+
+// Presente les PIN attribues. Sans cet ecran, l'administrateur ne
+// connait pas les codes et les employes ne peuvent pas se connecter.
+function obAfficherPins(resultats, apres){
+  if(!resultats || !resultats.length){ apres(); return; }
+
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.75);'
+    + 'z-index:7000;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  var carte = document.createElement('div');
+  carte.style.cssText = 'background:#f0fae0;border-radius:24px;padding:24px 20px;'
+    + 'width:100%;max-width:400px;max-height:85vh;overflow-y:auto';
+
+  var horsLigne = resultats.filter(function(r){ return !r.sync; }).length;
+
+  carte.innerHTML =
+    '<div style="text-align:center;margin-bottom:18px">'
+    + '<div style="font-size:42px;margin-bottom:8px">🔑</div>'
+    + '<div style="font-size:19px;font-weight:800;color:#1a1a1a">Codes de connexion</div>'
+    + '<div style="font-size:13px;color:#888;margin-top:8px;line-height:1.5">'
+    + 'Notez ces codes et transmettez-les. Ils ne seront plus affichés.'
+    + '</div></div>';
+
+  resultats.forEach(function(r){
+    var ligne = document.createElement('div');
+    ligne.style.cssText = 'background:#fff;border-radius:14px;padding:14px;margin-bottom:8px;'
+      + 'display:flex;align-items:center;gap:12px;'
+      + 'border-left:4px solid ' + (r.sync ? '#22c55e' : '#f59e0b');
+    ligne.innerHTML =
+      '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:15px;font-weight:700;color:#1a1a1a">' + r.nom + '</div>'
+      + '<div style="font-size:11px;color:#888;margin-top:2px">' + r.role
+      + (r.sync ? ' · synchronisé' : ' · local seulement') + '</div>'
+      + (r.erreur ? '<div style="font-size:11px;color:#e53935;margin-top:3px">' + r.erreur + '</div>' : '')
+      + '</div>'
+      + '<div style="font-size:24px;font-weight:900;letter-spacing:3px;color:#1B6FE8;'
+      + 'font-family:monospace;flex-shrink:0">' + (r.pin || '—') + '</div>';
+    carte.appendChild(ligne);
+  });
+
+  if(horsLigne){
+    var avert = document.createElement('div');
+    avert.style.cssText = 'background:#fff8e1;border-radius:12px;padding:12px;margin-top:10px;'
+      + 'font-size:12px;color:#b45309;line-height:1.5';
+    avert.textContent = horsLigne + ' code(s) enregistré(s) localement seulement. '
+      + 'Reposez-les depuis Administration une fois le serveur joignable.';
+    carte.appendChild(avert);
+  }
+
+  var btn = document.createElement('button');
+  btn.style.cssText = 'width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:14px;'
+    + 'padding:15px;font-size:15px;font-weight:700;cursor:pointer;margin-top:14px;'
+    + 'box-sizing:border-box;min-height:48px';
+  btn.textContent = 'J\'ai noté ces codes';
+  btn.onclick = function(){ ov.remove(); apres(); };
+  carte.appendChild(btn);
+
+  ov.appendChild(carte);
+  document.body.appendChild(ov);
 }
 
 function terminerOnboarding(){
