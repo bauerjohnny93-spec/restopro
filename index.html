@@ -10601,6 +10601,29 @@ function renderParametres(){
     var addB=document.createElement('button');addB.style.cssText='background:#1B6FE8;color:#fff;border:none;border-radius:12px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer';addB.textContent='+ Ajouter';
     addB.onclick=function(){var v=addI.value.trim();if(!v)return;if(!parametresData.postes)parametresData.postes=[];parametresData.postes.push(v);addI.value='';saveAll();refreshP();};
     addD.appendChild(addI);addD.appendChild(addB);wrap.appendChild(addD);
+  } else if(paramsTab==='haccp'){
+    // Renvoi vers le module Temperatures : la configuration des frigos
+    // et des releves y existe deja (renderFrigosConfig, addFrigo…).
+    // On ne la duplique pas ici.
+    var hCarte=document.createElement('div');
+    hCarte.style.cssText='background:#f0fae0;border-radius:14px;padding:18px 16px;text-align:center';
+    hCarte.innerHTML=
+      '<div style="font-size:38px;margin-bottom:10px">🌡️</div>'+
+      '<div style="font-size:16px;font-weight:800;color:#1a1a1a;margin-bottom:8px">Configuration HACCP</div>'+
+      '<div style="font-size:13px;color:#888;line-height:1.6">'+
+        'La configuration des frigos et des relevés de température se fait '+
+        'directement dans le module Températures : ajout et suppression de '+
+        'frigos, seuils, groupes et relevés du jour.'+
+      '</div>';
+    var hBtn=document.createElement('button');
+    hBtn.style.cssText='width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:12px;'+
+      'padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:14px;'+
+      'box-sizing:border-box;min-height:44px';
+    hBtn.innerHTML='🌡️ Ouvrir Températures';
+    hBtn.onclick=function(){ openMod('temperatures'); };
+    hCarte.appendChild(hBtn);
+    wrap.appendChild(hCarte);
+
   } else if(paramsTab==='theme'){
     var themes=[{id:'vert',l:'Vert naturel',p:'#b8dca0'},{id:'bleu',l:'Bleu pro',p:'#dbeafe'},{id:'creme',l:'Crème',p:'#fef3c7'},{id:'sombre',l:'Sombre',p:'#1e293b'}];
     var tg=document.createElement('div');tg.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px';
