@@ -1243,6 +1243,17 @@ var Auth = {
       .catch(function(e){ return {ok:false, reseau:true, msg:String(e)}; });
   },
 
+  // Met a jour un membership existant (nom, role, actif…).
+  // Sans elle, desactiver un membre dans l'application ne coupait pas
+  // son acces : le serveur le croyait toujours actif et verifier_pin
+  // acceptait son PIN. Le meme defaut touchait le nom et le role.
+  majMembership: function(membershipId, champs){
+    if(!this.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configure'});
+    return this.client.from('memberships').update(champs).eq('id', membershipId)
+      .then(function(r){ return {ok: !r.error, msg: r.error ? r.error.message : null}; })
+      .catch(function(e){ return {ok:false, reseau:true, msg:String(e)}; });
+  },
+
   // Supprime un membership. Sert uniquement a annuler une creation
   // dont le PIN n'a pas pu etre pose : sans cela on laisserait en base
   // un employe sans pin_hash, incapable de se connecter et visible
@@ -12519,6 +12530,24 @@ function adminOuvrirFormMembre(userExistant){
         showToast('Serveur : '+(m.msg||'creation impossible'),'error',5000);
         return;
       }
+      // Pour un membre EXISTANT, propager nom / role / actif avant le PIN.
+      // A la creation, creerMembership() a deja pose les bonnes valeurs.
+      var maj = membershipNouveau
+        ? Promise.resolve({ok:true})
+        : Auth.majMembership(m.id, {
+            nom: nom,
+            role: ROLES_APP_VERS_BASE[role] || 'cuisinier',
+            actif: actif
+          });
+
+      return maj.then(function(u){
+      if(!u.ok){
+        reactiver();
+        if(u.reseau){ replierEnLocal(); return; }
+        // Refus serveur : on n'ecrit rien, pas de fausse synchronisation.
+        showToast('Mise a jour refusee : '+(u.msg||'droits insuffisants'),'error',5000);
+        return;
+      }
       return Auth.definirPin(m.id, pin).then(function(r){
         reactiver();
         if(!r.ok){
@@ -12543,6 +12572,7 @@ function adminOuvrirFormMembre(userExistant){
         }
         enregistrerLocal(true, m.id);
         showToast(isEdit?'Membre modifie — PIN synchronise':(nom+' ajoute — PIN synchronise'),'success',3000);
+      });
       });
     }).catch(function(){
       reactiver();
