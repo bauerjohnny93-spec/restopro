@@ -12585,11 +12585,42 @@ function adminOuvrirFormMembre(userExistant){
   if(isEdit){
     var dl=document.createElement('button');
     dl.style.cssText='background:#ffebee;color:#e53935;border:none;border-radius:14px;padding:15px;font-size:14px;font-weight:700;cursor:pointer';
-    dl.textContent='Suppr';
+    // Desactiver plutot que supprimer : la fiche et le membership Supabase
+    // sont conserves, seul l'acces est coupe. Supprimer la fiche localement
+    // laissait la ligne active en base — le membre pouvait encore se
+    // connecter, et sa fiche n'etait plus accessible pour le corriger.
+    var estInactif = (userExistant.actif === false);
+    dl.textContent = estInactif ? 'Reactiver' : 'Desactiver';
+    if(estInactif){
+      dl.style.background='#e8f5e9'; dl.style.color='#16a34a';
+    }
     dl.onclick=function(){
-      usersData=(usersData||[]).filter(function(u){return u.id!==userExistant.id;});
-      auditEnregistrer('admin','Membre supprime',userExistant.nom,'Administration');
-      saveAll();ov.remove();showToast('Membre supprime','success');renderAdministration();
+      var nouvelEtat = estInactif;   // inactif -> on reactive, actif -> on desactive
+
+      function appliquerLocal(sync){
+        var idx=(usersData||[]).findIndex(function(u){return u.id===userExistant.id;});
+        if(idx>=0){ usersData[idx].actif=nouvelEtat; usersData[idx].pinSync=!!sync; }
+        auditEnregistrer('admin', nouvelEtat?'Membre reactive':'Membre desactive',
+                         userExistant.nom, 'Administration');
+        saveAll(); ov.remove();
+        showToast(nouvelEtat ? 'Membre reactive'
+                             : 'Membre desactive — acces coupe', 'success', 3000);
+        renderAdministration();
+      }
+
+      var appareil=(typeof Auth!=='undefined') ? Auth.appareilInfos() : null;
+      var serveurPret=(typeof Auth!=='undefined') && Auth.dispo()
+                      && appareil && appareil.restaurantId && userExistant.membershipId;
+      if(!serveurPret){ appliquerLocal(false); return; }
+
+      dl.disabled=true;
+      Auth.majMembership(userExistant.membershipId, {actif: nouvelEtat}).then(function(u){
+        dl.disabled=false;
+        if(u.ok){ appliquerLocal(true); return; }
+        if(u.reseau){ appliquerLocal(false); return; }
+        // Refus serveur : on n'ecrit rien, l'acces reste tel qu'il est.
+        showToast('Refuse par le serveur : '+(u.msg||'droits insuffisants'),'error',5000);
+      }).catch(function(){ dl.disabled=false; appliquerLocal(false); });
     };
     bb.appendChild(sv);bb.appendChild(dl);bb.appendChild(cn);
   } else {
