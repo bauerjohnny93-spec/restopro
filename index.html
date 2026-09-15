@@ -881,7 +881,44 @@ var LS_KEY = 'restopro_v2';
 
 
 
-function saveAll() {
+// ════════════════════════════════════════════════════════════
+// SAUVEGARDE REGROUPEE
+//
+// saveAll() est appele plus de cent fois dans l'application, souvent
+// plusieurs fois pour une meme action. Chaque appel reecrivait la
+// TOTALITE des donnees — plusieurs centaines de Ko — de facon
+// synchrone, ce qui fige l'interface sur telephone.
+//
+// Desormais les appels rapprochés sont regroupés : une seule ecriture
+// 300 ms apres le dernier. Une modification finit toujours par etre
+// ecrite ; les moments critiques (fermeture, deconnexion, changement
+// de restaurant, rechargement) forcent l'ecriture immediate.
+// ════════════════════════════════════════════════════════════
+var _saveTimer = null;
+
+function saveAll(){
+  if(_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(function(){
+    _saveTimer = null;
+    saveAllReel();
+  }, 300);
+}
+
+// Ecriture immediate, et annulation de toute ecriture en attente.
+// A utiliser partout ou l'on ne peut pas se permettre d'attendre.
+function saveAllNow(){
+  if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer = null; }
+  saveAllReel();
+}
+
+// Ecrit uniquement s'il reste quelque chose en attente.
+function saveAllFlush(){
+  if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer = null; saveAllReel(); }
+}
+
+// Ecriture reelle. N'est plus appelee directement : saveAll() la
+// declenche apres regroupement, saveAllNow() la force immediatement.
+function saveAllReel() {
   var data = {
     usersData: usersData,
     tafTasks: restoFull('tafTasks').map(function(t){ return {id:t.id,nom:t.nom,cat:t.cat,creneau:t.creneau,equipe:t.equipe,prio:t.prio,done:t.done,elapsed:t.elapsed,date:t.date}; }),
@@ -1485,7 +1522,7 @@ function appareilConfigurer(){
 // Déconnexion de l'APPAREIL — à ne pas confondre avec kLogout(),
 // qui ne déconnecte que l'employé.
 function appareilDeconnecter(){
-  try { if(typeof saveAll === 'function' && currentResto) saveAll(); } catch(e){}
+  try { if(typeof saveAllNow === 'function' && currentResto) saveAllNow(); } catch(e){}
   currentUser = ''; currentRole = ''; currentResto = ''; pin = '';
   Auth.oublier();          // session employé
   Auth.oublierAppareil();  // mémoire appareil
@@ -1714,7 +1751,7 @@ function choisirResto(resto){
 
 function choisirRestoAvecUser(foundUser, resto){
   // Sauvegarder l'état courant avant de basculer, puis recloisonner
-  try { if(typeof saveAll === 'function' && currentResto) saveAll(); } catch(e){}
+  try { if(typeof saveAllNow === 'function' && currentResto) saveAllNow(); } catch(e){}
   currentResto = resto;
   // Memoriser la session 12 h : permet de rentrer sans reseau
   try { if(typeof Auth !== 'undefined') Auth.memoriser(foundUser, resto); } catch(e){}
@@ -1736,7 +1773,7 @@ function choisirRestoAvecUser(foundUser, resto){
 // L'appareil reste connecte a Supabase — voir appareilDeconnecter().
 function kLogout() {
   // Sauvegarder avant de quitter, sinon les saisies en cours sont perdues
-  try { if(typeof saveAll === 'function' && currentResto) saveAll(); } catch(e){}
+  try { if(typeof saveAllNow === 'function' && currentResto) saveAllNow(); } catch(e){}
 
   pin = '';
   currentUser  = '';          // etait oublie : la session restait identifiee
@@ -4509,9 +4546,9 @@ function scanRapidePhoto(input){
 var checkAllAlertsTimer = null;
 
 // ── Sauvegarde à la fermeture et passage en arrière-plan ──
-window.addEventListener('beforeunload', function(){ saveAll(); });
+window.addEventListener('beforeunload', function(){ saveAllFlush(); });
 document.addEventListener('visibilitychange', function(){
-  if(document.visibilityState === 'hidden') saveAll();
+  if(document.visibilityState === 'hidden') saveAllFlush();
 });
 
 function scanRapideAfficherResultat(info){
@@ -9855,7 +9892,7 @@ function offlineEnqueue(type, data){
 // Sauvegarde automatique toutes les 30 secondes
 setInterval(function(){
   if(stockItems.length||recepItems.length||tempReleves.length){
-    saveAll();
+    saveAllNow();
     offlineLastSave=new Date().toISOString();
   }
 },30000);
@@ -13983,7 +14020,7 @@ function adminImporterDonnees(input){
       if(data.infoData) infoData=data.infoData;
       if(data.produitsVendus) produitsVendus=data.produitsVendus;
       if(data.cartonsData) cartonsData=data.cartonsData;
-      saveAll();
+      saveAllNow();
       showToast('✅ Données importées !','success');
       auditEnregistrer('system','Import données','Fichier importé','Administration');
       setTimeout(function(){location.reload();},1500);
