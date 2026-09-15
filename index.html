@@ -1566,21 +1566,18 @@ function kPress(n) {
   pin += String(n);
   kRefresh();
   if(_kTimer){ clearTimeout(_kTimer); _kTimer = null; }
-  if(pin.length < 4) return;
 
-  if(Auth.dispo()){
-    // Serveur actif : on attend une pause de saisie, sinon un PIN
-    // a 6 chiffres declencherait trois appels reseau successifs.
-    // 650 ms suffisent : chaque nouvelle touche relance le compte a
-    // rebours, donc un PIN a 6 chiffres n'est envoye qu'une fois la
-    // saisie terminee. Le bouton OK declenche immediatement.
-    _kTimer = setTimeout(function(){ _kTimer = null; kLogin(); }, 650);
-  } else {
-    // Secours local : comportement d'origine, inchange.
-    var found = usersData.find(function(u){ return String(u.pin) === String(pin) && u.actif !== false; });
-    if(!found) found = PINS[pin] ? {pin:pin} : null;
-    if(found) setTimeout(function(){ kLogin(); }, 200);
-  }
+  // Verification automatique UNIQUEMENT a 6 chiffres.
+  // Toute temporisation lancee des le 4e chiffre empechait de composer
+  // tranquillement un PIN plus long : la verification partait pendant
+  // que l'utilisateur tapait encore. A 6 chiffres il n'y a plus
+  // d'ambiguite, c'est la longueur maximale.
+  // Pour un PIN de 4 ou 5 chiffres, l'utilisateur valide avec OK,
+  // actif des le 4e chiffre (voir kRefresh).
+  if(pin.length < 6) return;
+
+  // Court delai pour que le 6e point s'affiche avant l'appel.
+  _kTimer = setTimeout(function(){ _kTimer = null; kLogin(); }, 250);
 }
 
 function kErase() {
