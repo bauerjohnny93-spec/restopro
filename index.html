@@ -8853,6 +8853,15 @@ function planningRenderSemaine(el){
     (planningDateOffset!==0?'<button onclick="planningDateOffset=0;renderPlanning()" style="background:#1B6FE8;color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer">Auj.</button>':'');
   wrap.appendChild(nav);
 
+  // Duplication de la semaine precedente
+  var dup=document.createElement('button');
+  dup.style.cssText='width:100%;background:#e8f0ff;color:#1B6FE8;border:1.5px solid #1B6FE8;'+
+    'border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;'+
+    'margin-bottom:12px;box-sizing:border-box;min-height:42px';
+  dup.innerHTML='&#128203; Dupliquer la semaine précédente';
+  dup.onclick=function(){ planningConfirmerDuplication(monday); };
+  wrap.appendChild(dup);
+
   // Les 7 jours de la semaine
   var jours=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
   var sem=[];
@@ -8878,13 +8887,13 @@ function planningRenderSemaine(el){
   // Grille croisant employes x jours.
   // La colonne des noms reste figee a gauche ; les jours defilent
   // horizontalement, seule facon de tenir 7 colonnes sur un telephone.
-  var LARG_NOM=104, LARG_JOUR=76;
+  var LARG_NOM=104, LARG_JOUR=76, LARG_TOT=54;
   var cadre=document.createElement('div');
   cadre.style.cssText='overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;'+
     'border:1px solid #dde8c8;background:#fff';
 
   var table=document.createElement('div');
-  table.style.cssText='min-width:'+(LARG_NOM+7*LARG_JOUR)+'px';
+  table.style.cssText='min-width:'+(LARG_NOM+7*LARG_JOUR+LARG_TOT)+'px';
 
   // En-tete
   var enTete=document.createElement('div');
@@ -8903,6 +8912,11 @@ function planningRenderSemaine(el){
     th.textContent=j.label;
     enTete.appendChild(th);
   });
+  var thTot=document.createElement('div');
+  thTot.style.cssText='width:'+LARG_TOT+'px;flex-shrink:0;padding:8px 4px;text-align:center;'+
+    'font-size:11px;font-weight:800;color:#fff;background:rgba(255,255,255,.15)';
+  thTot.textContent='Total';
+  enTete.appendChild(thTot);
   table.appendChild(enTete);
 
   // Une ligne par employe
@@ -8956,6 +8970,23 @@ function planningRenderSemaine(el){
 
       ligne.appendChild(cell);
     });
+
+    // Total des heures de travail de la semaine affichee, pour cet employe.
+    // Reprend planningHeuresShift(), qui gere les services de nuit.
+    var totalSem=(planningData||[]).filter(function(p){
+      return p.userId===u.id && p.type==='travail'
+             && sem.some(function(j){ return j.cle===p.date; });
+    }).reduce(function(s,p){ return s + planningHeuresShift(p); }, 0);
+
+    var cellTot=document.createElement('div');
+    cellTot.style.cssText='width:'+LARG_TOT+'px;flex-shrink:0;padding:8px 4px;'+
+      'display:flex;align-items:center;justify-content:center;'+
+      'border-left:1px solid #e8f0d8;background:'+(idx%2?'#f4f8ec':'#fafdf5');
+    cellTot.innerHTML='<span style="font-size:12px;font-weight:800;color:'+
+      (totalSem>0?'#1B6FE8':'#ccc')+'">'+
+      (totalSem>0 ? (Math.round(totalSem*10)/10)+' h' : '—')+'</span>';
+    ligne.appendChild(cellTot);
+
     table.appendChild(ligne);
   });
 
@@ -9055,6 +9086,161 @@ var PLANNING_COULEURS = {
   'Salle':   {fond:'#e8f5e9', trait:'#16a34a', texte:'#15803d'},
   'Plonge':  {fond:'#fff8e1', trait:'#f59e0b', texte:'#b45309'}
 };
+// Duree d'un shift, en heures.
+// Un service de nuit (22:00 -> 02:00) franchit minuit : la formule
+// « fin - debut » y donnait un resultat NEGATIF, faussant tout le total
+// de l'employe. On ajoute 24 h quand la fin precede le debut.
+// Analyse ce qu'une duplication produirait, SANS rien ecrire.
+// Sert a presenter un recapitulatif avant confirmation.
+function planningAnalyserDuplication(lundiCible){
+  var cible = [], source = [];
+  for(var i = 0; i < 7; i++){
+    var dc = new Date(lundiCible); dc.setDate(lundiCible.getDate() + i);
+    cible.push(dc.toISOString().split('T')[0]);
+    var ds = new Date(lundiCible); ds.setDate(lundiCible.getDate() + i - 7);
+    source.push(ds.toISOString().split('T')[0]);
+  }
+  var aCopier = (planningData||[]).filter(function(p){
+    return p.type === 'travail' && source.indexOf(p.date) >= 0;
+  });
+  var copies = 0, ignores = 0, parEmploye = {};
+  aCopier.forEach(function(p){
+    var nd = cible[source.indexOf(p.date)];
+    var doublon = (planningData||[]).some(function(x){
+      return x.userId === p.userId && x.date === nd
+          && x.debut === p.debut && x.fin === p.fin && x.type === 'travail';
+    });
+    if(doublon){ ignores++; return; }
+    copies++;
+    var u = (usersData||[]).find(function(x){ return x.id === p.userId; });
+    var nom = u ? u.nom : 'Inconnu';
+    parEmploye[nom] = (parEmploye[nom] || 0) + 1;
+  });
+  return { total: aCopier.length, copies: copies, ignores: ignores, parEmploye: parEmploye };
+}
+
+// Recapitulatif avant copie : l'utilisateur voit ce qui va etre ajoute
+// avant que quoi que ce soit ne soit ecrit.
+function planningConfirmerDuplication(lundiCible){
+  var a = planningAnalyserDuplication(lundiCible);
+
+  if(!a.total){
+    showToast('Aucun shift à dupliquer la semaine précédente','error',4000);
+    return;
+  }
+  if(!a.copies){
+    showToast('Tous les shifts sont déjà présents cette semaine','error',4000);
+    return;
+  }
+
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);'
+    + 'z-index:6000;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  var carte = document.createElement('div');
+  carte.style.cssText = 'background:#f0fae0;border-radius:20px;padding:22px 18px;'
+    + 'width:100%;max-width:340px;max-height:80vh;overflow-y:auto';
+
+  var detail = Object.keys(a.parEmploye).map(function(nom){
+    return '<div style="display:flex;justify-content:space-between;font-size:13px;'
+         + 'color:#555;padding:3px 0"><span>' + nom + '</span>'
+         + '<strong>' + a.parEmploye[nom] + ' shift(s)</strong></div>';
+  }).join('');
+
+  carte.innerHTML =
+    '<div style="text-align:center;margin-bottom:16px">'
+    + '<div style="font-size:38px;margin-bottom:8px">&#128203;</div>'
+    + '<div style="font-size:17px;font-weight:800;color:#1a1a1a">Dupliquer la semaine ?</div>'
+    + '</div>'
+    + '<div style="background:#fff;border-radius:12px;padding:12px;margin-bottom:10px">' + detail + '</div>'
+    + '<div style="font-size:13px;color:#16a34a;font-weight:700;text-align:center">'
+    + a.copies + ' shift(s) seront ajoutés</div>'
+    + (a.ignores
+       ? '<div style="font-size:12px;color:#b45309;text-align:center;margin-top:4px">'
+         + a.ignores + ' déjà présent(s), ils seront ignorés</div>' : '')
+    + '<div style="font-size:11px;color:#888;text-align:center;margin-top:10px;line-height:1.5">'
+    + 'Les shifts existants ne seront pas supprimés.<br>Congés et absences ne sont pas copiés.</div>';
+
+  var ok = document.createElement('button');
+  ok.style.cssText = 'width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:12px;'
+    + 'padding:14px;font-size:14px;font-weight:700;cursor:pointer;margin-top:14px;'
+    + 'box-sizing:border-box;min-height:46px';
+  ok.textContent = 'Dupliquer';
+  ok.onclick = function(){ ov.remove(); planningDupliquerSemaine(lundiCible); };
+  carte.appendChild(ok);
+
+  var non = document.createElement('button');
+  non.style.cssText = 'width:100%;background:none;border:none;color:#888;padding:11px;'
+    + 'font-size:13px;font-weight:600;cursor:pointer;margin-top:4px;min-height:40px';
+  non.textContent = 'Annuler';
+  non.onclick = function(){ ov.remove(); };
+  carte.appendChild(non);
+
+  ov.appendChild(carte);
+  document.body.appendChild(ov);
+}
+
+// Duplique les shifts de la semaine precedente vers celle affichee.
+// Ne copie QUE les shifts de travail : congés et absences sont dates,
+// les recopier creerait de fausses absences.
+function planningDupliquerSemaine(lundiCible){
+  var cible = [], source = [];
+  for(var i = 0; i < 7; i++){
+    var dc = new Date(lundiCible); dc.setDate(lundiCible.getDate() + i);
+    cible.push(dc.toISOString().split('T')[0]);
+    var ds = new Date(lundiCible); ds.setDate(lundiCible.getDate() + i - 7);
+    source.push(ds.toISOString().split('T')[0]);
+  }
+
+  var aCopier = (planningData||[]).filter(function(p){
+    return p.type === 'travail' && source.indexOf(p.date) >= 0;
+  });
+
+  if(!aCopier.length){
+    showToast('Aucun shift à dupliquer la semaine précédente','error',4000);
+    return;
+  }
+
+  var copies = 0, ignores = 0, base = Date.now();
+  aCopier.forEach(function(p){
+    var nouvelleDate = cible[source.indexOf(p.date)];
+    // Un shift identique existe deja : meme employe, meme jour, memes heures.
+    var doublon = (planningData||[]).some(function(x){
+      return x.userId === p.userId && x.date === nouvelleDate
+          && x.debut === p.debut && x.fin === p.fin && x.type === 'travail';
+    });
+    if(doublon){ ignores++; return; }
+
+    base++;
+    planningData.push(restoStamp({
+      id: base, userId: p.userId, date: nouvelleDate,
+      debut: p.debut, fin: p.fin, poste: p.poste,
+      type: p.type, statut: p.statut
+    }));
+    copies++;
+  });
+
+  if(copies){
+    auditEnregistrer('planning','Semaine dupliquee',
+                     copies + ' shift(s) copié(s), ' + ignores + ' ignoré(s)', 'Planning');
+    saveAll();
+  }
+
+  var msg = copies + ' shift(s) copié(s)'
+          + (ignores ? ' · ' + ignores + ' déjà présent(s), ignoré(s)' : '');
+  showToast(msg, copies ? 'success' : 'error', 4500);
+  renderPlanning();
+}
+
+function planningHeuresShift(s){
+  if(!s || !s.debut || !s.fin) return 0;
+  var d = parseInt(s.debut.split(':')[0])*60 + parseInt(s.debut.split(':')[1]);
+  var f = parseInt(s.fin.split(':')[0])*60 + parseInt(s.fin.split(':')[1]);
+  if(isNaN(d) || isNaN(f)) return 0;
+  if(f <= d) f += 24*60;          // le service se termine le lendemain
+  return (f - d) / 60;
+}
+
 function planningCouleur(poste){
   return PLANNING_COULEURS[poste] || {fond:'#f0f0f0', trait:'#9ca3af', texte:'#555'};
 }
