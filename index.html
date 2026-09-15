@@ -8579,15 +8579,29 @@ function planningRenderMois(el){
     cell.appendChild(numDiv);
 
     // Shifts (max 2 affichés)
+    // Nom COMPLET, et couleur selon le poste. Le CSS se charge de
+    // tronquer proprement si la case est trop etroite.
     var allEvents=[].concat(
-      shiftsDay.map(function(s){var u=usersData.find(function(x){return x.id===s.userId;});return {label:(u?u.nom.split(' ')[0]:s.poste),color:'#22c55e',bg:'#e8f5e9'};}),
-      abDay.map(function(a){var u=usersData.find(function(x){return x.id===a.userId;});return {label:(u?u.nom.split(' ')[0]:'Abs'),color:'#e53935',bg:'#ffebee'};}),
-      cgDay.map(function(c){var u=usersData.find(function(x){return x.id===c.userId;});return {label:(u?u.nom.split(' ')[0]:'🌴'),color:'#f59e0b',bg:'#fff8e1'};})
+      shiftsDay.map(function(s){
+        var u=usersData.find(function(x){return x.id===s.userId;});
+        var col=planningCouleur(s.poste);
+        return {label:(u?u.nom:(s.poste||'Shift')), color:col.texte, bg:col.fond, trait:col.trait};
+      }),
+      abDay.map(function(a){
+        var u=usersData.find(function(x){return x.id===a.userId;});
+        return {label:(u?u.nom:'Absence'), color:'#e53935', bg:'#ffebee', trait:'#e53935'};
+      }),
+      cgDay.map(function(cg){
+        var u=usersData.find(function(x){return x.id===cg.userId;});
+        return {label:(u?u.nom:'Congé'), color:'#b45309', bg:'#fff8e1', trait:'#f59e0b'};
+      })
     );
 
     allEvents.slice(0,2).forEach(function(ev){
       var tag=document.createElement('div');
-      tag.style.cssText='background:'+ev.bg+';color:'+ev.color+';border-radius:4px;padding:1px 4px;font-size:9px;font-weight:700;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      tag.style.cssText='background:'+ev.bg+';color:'+ev.color+';border-left:2px solid '+(ev.trait||ev.color)+
+        ';border-radius:3px;padding:1px 3px;font-size:9px;font-weight:700;margin-bottom:1px;'+
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
       tag.textContent=ev.label;
       cell.appendChild(tag);
     });
@@ -8636,6 +8650,9 @@ function planningVoirJour(dateStr){
       '<div style="font-size:12px;color:#888;margin-top:2px">'+s.debut+' → '+s.fin+(s.poste&&s.poste!=='—'?' · '+s.poste:'')+'</div>'+
     '</div>'+
     '<span style="font-size:11px;font-weight:700;color:'+col+'">'+(s.type==='travail'?'Travail':s.type==='absence'?'Absence':'Congé')+'</span>';
+    // Cliquer sur un shift permet de le modifier ou de le supprimer.
+    row.style.cursor='pointer';
+    row.onclick=(function(sid){return function(){ planningModifierShift(sid); };})(s.id);
     box.appendChild(row);
   });
 
@@ -8684,7 +8701,7 @@ function planningAjouterShiftDate(dateStr){
       '<div class="ff"><label>Debut</label><input type="time" id="pld-debut" value="09:00"></div>'+
       '<div class="ff"><label>Fin</label><input type="time" id="pld-fin" value="17:00"></div>'+
     '</div>'+
-    '<div class="ff"><label>Poste</label><input type="text" id="pld-poste" placeholder="Cuisine, Salle..."></div>';
+    '<div class="ff"><label>Poste</label><select id="pld-poste">'+planningOptionsPoste('')+'</select></div>';
   var btnRow=document.createElement('div');
   btnRow.style.cssText='display:flex;gap:8px';
   var addBtn2=document.createElement('button');
@@ -8824,53 +8841,144 @@ function planningRenderSemaine(el){
   var day=now.getDay();
   var diff=day===0?-6:1-day;
   monday.setDate(now.getDate()+diff+(planningDateOffset*7));
+  var dimanche=new Date(monday); dimanche.setDate(monday.getDate()+6);
 
+  var moisN=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
   var nav=document.createElement('div');
   nav.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:12px';
-  var moisN=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
-  var fri=new Date(monday); fri.setDate(monday.getDate()+6);
   nav.innerHTML=
-    '<button onclick="planningDateOffset--;renderPlanning()" style="width:34px;height:34px;border-radius:8px;border:1.5px solid #dde8c8;background:#fff;font-size:16px;cursor:pointer">◀</button>'+
-    '<div style="flex:1;text-align:center;font-size:14px;font-weight:700;color:#1a1a1a">'+monday.getDate()+' '+moisN[monday.getMonth()]+' — '+fri.getDate()+' '+moisN[fri.getMonth()]+'</div>'+
-    '<button onclick="planningDateOffset++;renderPlanning()" style="width:34px;height:34px;border-radius:8px;border:1.5px solid #dde8c8;background:#fff;font-size:16px;cursor:pointer">▶</button>'+
+    '<button onclick="planningDateOffset--;renderPlanning()" style="width:34px;height:34px;border-radius:8px;border:1.5px solid #dde8c8;background:#fff;font-size:16px;cursor:pointer">&#9664;</button>'+
+    '<div style="flex:1;text-align:center;font-size:14px;font-weight:700;color:#1a1a1a">'+monday.getDate()+' '+moisN[monday.getMonth()]+' &mdash; '+dimanche.getDate()+' '+moisN[dimanche.getMonth()]+'</div>'+
+    '<button onclick="planningDateOffset++;renderPlanning()" style="width:34px;height:34px;border-radius:8px;border:1.5px solid #dde8c8;background:#fff;font-size:16px;cursor:pointer">&#9654;</button>'+
     (planningDateOffset!==0?'<button onclick="planningDateOffset=0;renderPlanning()" style="background:#1B6FE8;color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer">Auj.</button>':'');
   wrap.appendChild(nav);
 
+  // Les 7 jours de la semaine
   var jours=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
-  var grid=document.createElement('div');
-  grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px';
+  var sem=[];
   for(var i=0;i<7;i++){
     var d=new Date(monday); d.setDate(monday.getDate()+i);
-    var isToday=d.toDateString()===new Date().toDateString();
-    var dk=d.toISOString().split('T')[0];
-    var nb=planningData.filter(function(p){return p.date===dk&&p.type==='travail';}).length;
-    var cell=document.createElement('div');
-    cell.style.cssText='background:'+(isToday?'#1B6FE8':'#f0fae0')+';border-radius:10px;padding:8px 4px;text-align:center;cursor:pointer';
-    cell.innerHTML='<div style="font-size:10px;font-weight:700;color:'+(isToday?'rgba(255,255,255,.8)':'#888')+'">'+jours[i]+'</div>'+
-      '<div style="font-size:16px;font-weight:700;color:'+(isToday?'#fff':'#1a1a1a')+'">'+d.getDate()+'</div>'+
-      (nb?'<div style="font-size:10px;color:'+(isToday?'rgba(255,255,255,.8)':'#1B6FE8')+';font-weight:700">'+nb+'&#10003;</div>':'');
-    grid.appendChild(cell);
+    sem.push({ cle:d.toISOString().split('T')[0], label:jours[i]+' '+d.getDate(),
+               aujourdhui:d.toDateString()===new Date().toDateString() });
   }
-  wrap.appendChild(grid);
 
-  // Shifts de la semaine par employé
-  usersData.filter(function(u){return u.actif;}).forEach(function(u){
-    var shiftsWeek=planningData.filter(function(p){
-      return p.userId===u.id&&p.date>=monday.toISOString().split('T')[0]&&p.date<=fri.toISOString().split('T')[0];
-    });
-    if(!shiftsWeek.length) return;
-    var empCard=document.createElement('div');
-    empCard.style.cssText='background:#f0fae0;border-radius:12px;padding:12px;margin-bottom:8px';
-    var ini=u.nom.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
-    empCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:8px">'+ini+' '+u.nom+'</div>';
-    shiftsWeek.forEach(function(s){
-      var row=document.createElement('div');
-      row.style.cssText='font-size:12px;color:#555;padding:4px 0;border-bottom:1px solid #e8f0d8;display:flex;justify-content:space-between';
-      row.innerHTML='<span>'+s.date+'</span><span>'+s.debut+'–'+s.fin+(s.poste&&s.poste!=='—'?' · '+s.poste:'')+'</span>';
-      empCard.appendChild(row);
-    });
-    wrap.appendChild(empCard);
+  var equipe=(usersData||[]).filter(function(u){return u.actif!==false;});
+
+  if(!equipe.length){
+    var vide=document.createElement('div');
+    vide.style.cssText='text-align:center;padding:40px 20px;color:#bbb';
+    vide.innerHTML='<div style="font-size:44px;margin-bottom:10px">&#128101;</div>'+
+      '<div style="font-size:14px;font-weight:600;color:#999">Aucun employé actif</div>';
+    wrap.appendChild(vide);
+    el.appendChild(wrap);
+    addFab(function(){planningAjouterShift(null);});
+    return;
+  }
+
+  // Grille croisant employes x jours.
+  // La colonne des noms reste figee a gauche ; les jours defilent
+  // horizontalement, seule facon de tenir 7 colonnes sur un telephone.
+  var LARG_NOM=104, LARG_JOUR=76;
+  var cadre=document.createElement('div');
+  cadre.style.cssText='overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;'+
+    'border:1px solid #dde8c8;background:#fff';
+
+  var table=document.createElement('div');
+  table.style.cssText='min-width:'+(LARG_NOM+7*LARG_JOUR)+'px';
+
+  // En-tete
+  var enTete=document.createElement('div');
+  enTete.style.cssText='display:flex;background:#1B6FE8;position:sticky;top:0;z-index:2';
+  var coinTete=document.createElement('div');
+  coinTete.style.cssText='width:'+LARG_NOM+'px;flex-shrink:0;padding:8px 10px;'+
+    'font-size:11px;font-weight:800;color:rgba(255,255,255,.85);position:sticky;left:0;'+
+    'background:#1B6FE8;z-index:3';
+  coinTete.textContent='Équipe';
+  enTete.appendChild(coinTete);
+  sem.forEach(function(j){
+    var th=document.createElement('div');
+    th.style.cssText='width:'+LARG_JOUR+'px;flex-shrink:0;padding:8px 4px;text-align:center;'+
+      'font-size:11px;font-weight:700;color:'+(j.aujourdhui?'#fff':'rgba(255,255,255,.75)')+';'+
+      (j.aujourdhui?'background:rgba(255,255,255,.18);':'');
+    th.textContent=j.label;
+    enTete.appendChild(th);
   });
+  table.appendChild(enTete);
+
+  // Une ligne par employe
+  equipe.forEach(function(u,idx){
+    var ligne=document.createElement('div');
+    ligne.style.cssText='display:flex;border-top:1px solid #e8f0d8;'+
+      'background:'+(idx%2?'#fafdf5':'#fff');
+
+    var cellNom=document.createElement('div');
+    cellNom.style.cssText='width:'+LARG_NOM+'px;flex-shrink:0;padding:8px 10px;'+
+      'position:sticky;left:0;background:'+(idx%2?'#fafdf5':'#fff')+';z-index:1;'+
+      'border-right:1px solid #e8f0d8;display:flex;align-items:center';
+    // Nom complet, sur deux lignes si necessaire — jamais tronque.
+    cellNom.innerHTML='<span style="font-size:12px;font-weight:700;color:#1a1a1a;'+
+      'line-height:1.25;word-break:break-word">'+u.nom+'</span>';
+    ligne.appendChild(cellNom);
+
+    sem.forEach(function(j){
+      var cell=document.createElement('div');
+      cell.style.cssText='width:'+LARG_JOUR+'px;flex-shrink:0;padding:4px 3px;'+
+        'border-right:1px solid #f0f4e8;min-height:46px;'+
+        (j.aujourdhui?'background:rgba(27,111,232,.05);':'');
+
+      var duJour=(planningData||[]).filter(function(p){
+        return p.userId===u.id && p.date===j.cle;
+      });
+
+      duJour.forEach(function(s){
+        var pastille=document.createElement('div');
+        if(s.type==='absence'){
+          pastille.style.cssText='background:#ffebee;border-left:3px solid #e53935;'+
+            'border-radius:4px;padding:3px 4px;margin-bottom:2px;text-align:center';
+          pastille.innerHTML='<div style="font-size:9px;font-weight:700;color:#e53935">Absent</div>';
+        } else if(s.type==='conge'){
+          pastille.style.cssText='background:#fff8e1;border-left:3px solid #f59e0b;'+
+            'border-radius:4px;padding:3px 4px;margin-bottom:2px;text-align:center';
+          pastille.innerHTML='<div style="font-size:9px;font-weight:700;color:#b45309">Congé</div>';
+        } else {
+          var col=planningCouleur(s.poste);
+          pastille.style.cssText='background:'+col.fond+';border-left:3px solid '+col.trait+';'+
+            'border-radius:4px;padding:3px 4px;margin-bottom:2px;text-align:center';
+          pastille.innerHTML=
+            '<div style="font-size:10px;font-weight:800;color:'+col.texte+'">'+
+              (s.debut||'')+'-'+(s.fin||'')+'</div>'+
+            (s.poste&&s.poste!=='—'
+              ? '<div style="font-size:8px;color:'+col.texte+';opacity:.8;overflow:hidden;'+
+                'text-overflow:ellipsis;white-space:nowrap">'+s.poste+'</div>' : '');
+        }
+        cell.appendChild(pastille);
+      });
+
+      ligne.appendChild(cell);
+    });
+    table.appendChild(ligne);
+  });
+
+  cadre.appendChild(table);
+  wrap.appendChild(cadre);
+
+  // Legende des couleurs
+  var leg=document.createElement('div');
+  leg.style.cssText='display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;padding:0 2px';
+  PLANNING_POSTES.forEach(function(p){
+    var col=planningCouleur(p);
+    var it=document.createElement('div');
+    it.style.cssText='display:flex;align-items:center;gap:5px;font-size:11px;color:#888';
+    it.innerHTML='<span style="width:10px;height:10px;border-radius:3px;background:'+col.fond+';'+
+      'border-left:3px solid '+col.trait+';display:block"></span>'+p;
+    leg.appendChild(it);
+  });
+  wrap.appendChild(leg);
+
+  var aide=document.createElement('div');
+  aide.style.cssText='font-size:11px;color:#bbb;margin-top:8px;text-align:center';
+  aide.textContent='Faites défiler horizontalement pour voir toute la semaine';
+  wrap.appendChild(aide);
 
   el.appendChild(wrap);
   addFab(function(){planningAjouterShift(null);});
@@ -8891,7 +8999,7 @@ function planningAjouterShift(userId){
       '<div class="ff"><label>Début</label><input type="time" id="pl-debut" value="09:00"></div>'+
       '<div class="ff"><label>Fin</label><input type="time" id="pl-fin" value="17:00"></div>'+
     '</div>'+
-    '<div class="ff"><label>Poste</label><input type="text" id="pl-poste" placeholder="Cuisine, Salle, Plonge..."></div>'+
+    '<div class="ff"><label>Poste</label><select id="pl-poste">'+planningOptionsPoste('')+'</select></div>'+
     '<div style="display:flex;gap:8px">'+
       '<button onclick="planningAjouterConfirm()" class="btn-blue" style="flex:1;justify-content:center;padding:13px">Ajouter</button>'+
       '<button onclick="var ov=document.querySelector(\'[data-overlay]\');if(ov)ov.remove()" class="btn-out" style="padding:13px">Annuler</button>'+
@@ -8932,6 +9040,137 @@ function congesCalculerCP(userId, userName){
     return s+ouvrables;
   },0);
   return {acquis:cpAcquis,pris:cpPris,restants:Math.round((cpAcquis-cpPris)*10)/10,moisComplets:moisComplets};
+}
+
+// ════════════════════════════════════════════════════════════
+// PLANNING — postes et modification des shifts
+// ════════════════════════════════════════════════════════════
+
+var PLANNING_POSTES = ['Cuisine','Salle','Plonge'];
+
+// Couleur par poste, pour distinguer d'un coup d'oeil la composition
+// d'une journee. Un poste inconnu retombe sur le gris neutre.
+var PLANNING_COULEURS = {
+  'Cuisine': {fond:'#e8f0ff', trait:'#1B6FE8', texte:'#1B6FE8'},
+  'Salle':   {fond:'#e8f5e9', trait:'#16a34a', texte:'#15803d'},
+  'Plonge':  {fond:'#fff8e1', trait:'#f59e0b', texte:'#b45309'}
+};
+function planningCouleur(poste){
+  return PLANNING_COULEURS[poste] || {fond:'#f0f0f0', trait:'#9ca3af', texte:'#555'};
+}
+
+// Construit les <option> du champ Poste.
+// Si le shift porte deja une valeur absente de la liste — « Bar » ou
+// « Direction » sur d'anciens shifts — elle est ajoutee pour ne pas
+// etre ecrasee a l'enregistrement.
+function planningOptionsPoste(valeur){
+  var liste = PLANNING_POSTES.slice();
+  if(valeur && liste.indexOf(valeur) < 0) liste.push(valeur);
+  var html = '<option value=""' + (valeur ? '' : ' selected') + '>—</option>';
+  liste.forEach(function(p){
+    html += '<option value="' + p + '"' + (p === valeur ? ' selected' : '') + '>' + p + '</option>';
+  });
+  return html;
+}
+
+// Modification / suppression d'un shift existant.
+// Ouverte depuis la vue Jour (planningVoirJour).
+function planningModifierShift(shiftId){
+  var s = (planningData||[]).find(function(x){ return x.id === shiftId; });
+  if(!s){ showToast('Shift introuvable','error'); return; }
+
+  var ov = document.createElement('div');
+  ov.setAttribute('data-overlay','1');
+  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f7;'
+    + 'z-index:5200;display:flex;flex-direction:column';
+
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'background:#1B6FE8;padding:14px 16px;'
+    + 'padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;'
+    + 'align-items:center;gap:12px;flex-shrink:0';
+  var bk = document.createElement('button');
+  bk.style.cssText = 'background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;'
+    + 'cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;'
+    + 'align-items:center;justify-content:center;flex-shrink:0';
+  bk.innerHTML = '&#8592;'; bk.onclick = function(){ ov.remove(); };
+  hdr.appendChild(bk);
+  var ht = document.createElement('div');
+  ht.style.cssText = 'font-size:17px;font-weight:700;color:#fff';
+  ht.textContent = 'Modifier le shift';
+  hdr.appendChild(ht); ov.appendChild(hdr);
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:16px 14px 100px';
+
+  var opts = (usersData||[]).filter(function(u){ return u.actif !== false; })
+    .map(function(u){
+      return '<option value="' + u.id + '"' + (u.id === s.userId ? ' selected' : '') + '>'
+             + u.nom + '</option>';
+    }).join('');
+
+  wrap.innerHTML =
+    '<div class="ff"><label>Employé</label><select id="ms-user">' + opts + '</select></div>' +
+    '<div class="ff"><label>Date</label><input type="date" id="ms-date" value="' + (s.date||'') + '"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      '<div class="ff"><label>Début</label><input type="time" id="ms-debut" value="' + (s.debut||'') + '"></div>' +
+      '<div class="ff"><label>Fin</label><input type="time" id="ms-fin" value="' + (s.fin||'') + '"></div>' +
+    '</div>' +
+    '<div class="ff"><label>Poste</label><select id="ms-poste">'
+      + planningOptionsPoste(s.poste||'') + '</select></div>';
+  ov.appendChild(wrap);
+
+  var bb = document.createElement('div');
+  bb.style.cssText = 'background:#f0fae0;border-top:1px solid #dde8c8;padding:14px;'
+    + 'padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));flex-shrink:0';
+
+  var sv = document.createElement('button');
+  sv.style.cssText = 'width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:14px;'
+    + 'padding:15px;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box;min-height:48px';
+  sv.textContent = 'Enregistrer';
+  sv.onclick = function(){
+    s.userId = parseInt(document.getElementById('ms-user').value) || s.userId;
+    s.date   = document.getElementById('ms-date').value  || s.date;
+    s.debut  = document.getElementById('ms-debut').value || s.debut;
+    s.fin    = document.getElementById('ms-fin').value   || s.fin;
+    s.poste  = document.getElementById('ms-poste').value;
+    auditEnregistrer('planning','Shift modifie',
+                     (s.date||'') + ' ' + (s.debut||'') + '→' + (s.fin||''), 'Planning');
+    saveAll(); ov.remove();
+    showToast('Shift modifié','success');
+    if(typeof renderPlanning === 'function') renderPlanning();
+  };
+  bb.appendChild(sv);
+
+  var sup = document.createElement('button');
+  sup.style.cssText = 'width:100%;background:#ffebee;color:#e53935;border:none;border-radius:14px;'
+    + 'padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;'
+    + 'box-sizing:border-box;min-height:44px';
+  sup.textContent = 'Supprimer ce shift';
+  sup.onclick = function(){
+    // Confirmation en deux temps : pas de confirm(), inutilisable sur Android.
+    if(sup.dataset.confirme !== '1'){
+      sup.dataset.confirme = '1';
+      sup.textContent = 'Confirmer la suppression';
+      sup.style.background = '#e53935'; sup.style.color = '#fff';
+      setTimeout(function(){
+        if(sup.dataset.confirme === '1'){
+          sup.dataset.confirme = ''; sup.textContent = 'Supprimer ce shift';
+          sup.style.background = '#ffebee'; sup.style.color = '#e53935';
+        }
+      }, 4000);
+      return;
+    }
+    var idx = (planningData||[]).findIndex(function(x){ return x.id === shiftId; });
+    if(idx >= 0) planningData.splice(idx, 1);
+    auditEnregistrer('planning','Shift supprime',
+                     (s.date||'') + ' ' + (s.debut||''), 'Planning');
+    saveAll(); ov.remove();
+    showToast('Shift supprimé','success');
+    if(typeof renderPlanning === 'function') renderPlanning();
+  };
+  bb.appendChild(sup);
+  ov.appendChild(bb);
+  document.body.appendChild(ov);
 }
 
 function planningRenderConges(el){
