@@ -923,8 +923,12 @@ function saveAllReel() {
     usersData: usersData,
     tafTasks: restoFull('tafTasks').map(function(t){ return {id:t.id,nom:t.nom,cat:t.cat,creneau:t.creneau,equipe:t.equipe,prio:t.prio,done:t.done,elapsed:t.elapsed,date:t.date}; }),
     prodItems: restoFull('prodItems'),
-    frigosData: (frigosData||[]).map(function(f){ return {id:f.id,nom:f.nom,groupe:f.groupe,icoBg:f.icoBg,ico:f.ico,smin:f.smin,smax:f.smax,lim:f.lim,fait:f.fait,val:f.val,heure:f.heure,signe:f.signe,heureReleve:f.heureReleve}; }),
-    tempReleves: tempReleves,
+    // restoFull() refusionne les frigos de l'AUTRE restaurant avant
+    // ecriture. Le champ « resto » est explicitement recopie : sans lui,
+    // ce map le supprimerait et le cloisonnement serait perdu a chaque
+    // sauvegarde.
+    frigosData: restoFull('frigosData').map(function(f){ return {id:f.id,nom:f.nom,groupe:f.groupe,icoBg:f.icoBg,ico:f.ico,smin:f.smin,smax:f.smax,lim:f.lim,fait:f.fait,val:f.val,heure:f.heure,signe:f.signe,heureReleve:f.heureReleve,resto:f.resto}; }),
+    tempReleves: restoFull('tempReleves'),
     dlcItems: restoFull('dlcItems'),
     recepItems: restoFull('recepItems').map(function(r){ var x=Object.assign({},r); x.photoBL=null; return x; }),
     stockItems: restoFull('stockItems'),
@@ -3889,14 +3893,14 @@ function validerFrigo(id){
   var now=new Date();
   f.val=val;f.fait=true;f.signe=signe||'?';f.heureReleve=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   // Archiver dans historique
-  tempReleves.push({
+  tempReleves.push(restoStamp({
     date: now.toISOString().split('T')[0],
     heure: String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'),
     frigoId: f.id, frigoNom: f.nom, groupe: f.groupe,
     val: val, smin: f.smin, smax: f.smax, lim: f.lim,
     ok: ok, action: action, signe: signe||'?',
     resto: currentResto||'resto1'
-  });
+  }));
   closeFrigoModal();renderFrigosList();setTimeout(checkTempAlerte,100);saveAll();
   if(!ok){
     var al=document.createElement('div');
@@ -3937,12 +3941,12 @@ function addFrigo(){
   var grp=document.getElementById('new-frigo-groupe').value;
   var icmap={CAVE:'wine_glass',CUISINE:'magnifier',LABO:'pencil',AUTRE:'pencil'};
   var bgmap={CAVE:'#ead5f5',CUISINE:'#fef3cd',LABO:'#d4f0e8',AUTRE:'#e0f5cc'};
-  frigosData.push({id:Date.now(),nom:nom,groupe:grp,ico:icmap[grp]||'pencil',icoBg:bgmap[grp]||'#f0f0f0',
+  frigosData.push(restoStamp({id:Date.now(),nom:nom,groupe:grp,ico:icmap[grp]||'pencil',icoBg:bgmap[grp]||'#f0f0f0',
     smin:parseFloat(document.getElementById('new-frigo-min').value)||0,
     smax:parseFloat(document.getElementById('new-frigo-max').value)||4,
     lim :parseFloat(document.getElementById('new-frigo-lim').value)||4,
     heure:document.getElementById('new-frigo-heure').value||'07:00',
-    fait:false,val:null});
+    fait:false,val:null}));
   document.getElementById('new-frigo-nom').value='';
   renderFrigosConfig();renderFrigosList();saveAll();
 }
@@ -8240,9 +8244,7 @@ function planningRenderEquipe(el){
     var shiftsMonth=shifts.filter(function(p){return p.date&&p.date.startsWith(monthKey);});
     var heuresMonth=shiftsMonth.reduce(function(s,p){
       if(!p.debut||!p.fin)return s;
-      var deb=parseInt(p.debut.split(':')[0])*60+parseInt(p.debut.split(':')[1]);
-      var fin=parseInt(p.fin.split(':')[0])*60+parseInt(p.fin.split(':')[1]);
-      return s+(fin-deb)/60;
+      return s+planningHeuresShift(p);
     },0);
     var congesUser=congesData.filter(function(c){return c.userId===u.id&&c.statut==='confirme';});
     var absencesUser=planningData.filter(function(p){return p.userId===u.id&&p.type==='absence';});
@@ -8321,15 +8323,11 @@ function planningVoirEmploye(userId){
   var shiftsAll=planningData.filter(function(p){return p.userId===u.id&&p.type==='travail';});
   var heuresMois=shiftsAll.filter(function(p){return p.date&&p.date.startsWith(monthKey);}).reduce(function(s,p){
     if(!p.debut||!p.fin)return s;
-    var deb=parseInt(p.debut.split(':')[0])*60+parseInt(p.debut.split(':')[1]);
-    var fin=parseInt(p.fin.split(':')[0])*60+parseInt(p.fin.split(':')[1]);
-    return s+(fin-deb)/60;
+    return s+planningHeuresShift(p);
   },0);
   var heuresTotal=shiftsAll.reduce(function(s,p){
     if(!p.debut||!p.fin)return s;
-    var deb=parseInt(p.debut.split(':')[0])*60+parseInt(p.debut.split(':')[1]);
-    var fin=parseInt(p.fin.split(':')[0])*60+parseInt(p.fin.split(':')[1]);
-    return s+(fin-deb)/60;
+    return s+planningHeuresShift(p);
   },0);
   var congesUser=congesData.filter(function(c){return c.userId===u.id;});
   var absUser=planningData.filter(function(p){return p.userId===u.id&&p.type==='absence';});
@@ -8359,9 +8357,7 @@ function planningVoirEmploye(userId){
     shiftsAll.slice().reverse().slice(0,8).forEach(function(s){
       var row=document.createElement('div');
       row.style.cssText='background:#f0fae0;border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center';
-      var deb=parseInt(s.debut.split(':')[0])*60+parseInt(s.debut.split(':')[1]);
-      var fin=parseInt(s.fin.split(':')[0])*60+parseInt(s.fin.split(':')[1]);
-      var h=Math.round((fin-deb)/60*10)/10;
+      var h=Math.round(planningHeuresShift(s)*10)/10;
       row.innerHTML='<div><div style="font-size:13px;font-weight:600;color:#1a1a1a">'+s.date+'</div>'+
         '<div style="font-size:11px;color:#888">'+s.debut+' → '+s.fin+(s.poste&&s.poste!=='—'?' · '+s.poste:'')+'</div></div>'+
         '<div style="font-size:14px;font-weight:700;color:#1B6FE8">'+h+'h</div>';
@@ -8804,9 +8800,7 @@ function planningRenderPostes(el){
         var avatarColors={'Administrateur':'#1B6FE8','Responsable':'#16a34a','Cuisinier':'#e67e22','Serveur':'#9b59b6','Plongeur':'#0891b2'};
         var col=u?avatarColors[u.role]||'#888':'#888';
 
-        var deb=parseInt(s.debut.split(':')[0])*60+parseInt(s.debut.split(':')[1]);
-        var fin=parseInt(s.fin.split(':')[0])*60+parseInt(s.fin.split(':')[1]);
-        var h=Math.round((fin-deb)/60*10)/10;
+        var h=Math.round(planningHeuresShift(s)*10)/10;
 
         var empRow=document.createElement('div');
         empRow.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #e8f0d8';
@@ -8842,9 +8836,7 @@ function planningRenderPostes(el){
     if(!shifts.length) return;
     var heures=shifts.reduce(function(s,p){
       if(!p.debut||!p.fin)return s;
-      var deb=parseInt(p.debut.split(':')[0])*60+parseInt(p.debut.split(':')[1]);
-      var fin=parseInt(p.fin.split(':')[0])*60+parseInt(p.fin.split(':')[1]);
-      return s+(fin-deb)/60;
+      return s+planningHeuresShift(p);
     },0);
     var ini=u.nom.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
     var avatarColors={'Administrateur':'#1B6FE8','Responsable':'#16a34a','Cuisinier':'#e67e22','Serveur':'#9b59b6','Plongeur':'#0891b2'};
@@ -13163,7 +13155,11 @@ var onboardingSteps = [
 // ════════════════════════════════════════════════════════════
 var RESTO_ENTITES = ['stockItems','dlcItems','recepItems','pertesData','produitsVendus',
   'approData','planningData','congesData','prodItems','pointagesData','tafTasks',
-  'fichesData','stockMouvements','stockSorties','scanHistory'];
+  'fichesData','stockMouvements','stockSorties','scanHistory',
+  // Temperatures : ajoutees au cloisonnement. tempReleves est un journal,
+  // frigosData porte la configuration ET l'etat du jour (fait, val, heure).
+  // Sans cela, valider un releve au Resto 1 le marquait aussi fait au Resto 2.
+  'tempReleves','frigosData'];
 
 var _restoAutres = {};   // { entite: [lignes des AUTRES restaurants] }
 
@@ -13520,11 +13516,11 @@ function onboardingValiderStep(step){
       var grpInp = document.getElementById('ob-frigo-grp-'+i);
       var nomFrigo = nomFrigoInp?nomFrigoInp.value:'Frigo '+(i+1);
       var grp = grpInp?grpInp.value:'CUISINE';
-      frigosData.push({
+      frigosData.push(restoStamp({
         id: Date.now()+i, nom: nomFrigo, groupe: grp,
         smin:-2, smax:4, lim:8, val:null, fait:false,
         heureReleve:'', signe:''
-      });
+      }));
     }
     auditEnregistrer('system','Onboarding: '+nb+' frigo(s) configuré(s)', frigosData.map(function(f){return f.nom;}).join(', '), 'Onboarding');
     showToast('✅ '+nb+' frigo(s) créé(s) !', 'success');
@@ -13802,7 +13798,8 @@ function adminRenderSysteme(parent){
       pertesData:'Pertes',produitsVendus:'Produits vendus',approData:'Liste de courses',
       planningData:'Planning',congesData:'Congés',prodItems:'Productions',
       pointagesData:'Pointages',tafTasks:'Tâches',fichesData:'Fiches techniques',
-      stockMouvements:'Mouvements de stock',stockSorties:'Sorties de stock',scanHistory:'Scans'};
+      stockMouvements:'Mouvements de stock',stockSorties:'Sorties de stock',scanHistory:'Scans',
+      tempReleves:'Relevés de température',frigosData:'Frigos'};
     det.innerHTML=Object.keys(na.parEntite).map(function(k){
       return '<div style="display:flex;justify-content:space-between"><span>'+(libelles[k]||k)+'</span><strong>'+na.parEntite[k]+'</strong></div>';
     }).join('');
