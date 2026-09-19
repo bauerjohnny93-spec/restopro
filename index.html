@@ -1555,8 +1555,14 @@ function appareilDemarrage(){
     } else {
       // Session valide mais restaurant inconnu : on rejoue la détection
       Auth.mesRestaurants().then(function(restos){
-        if(restos.length === 1){ appareilFinaliser(restos[0], infos ? infos.email : ''); }
-        else { appareilAfficherEcran(); }
+        if(restos.length === 1){
+          appareilFinaliser(restos[0], infos ? infos.email : '');
+        } else if(restos.length > 1){
+          appareilAfficherEcran();
+          appareilProposerChoix(restos, infos ? infos.email : '');
+        } else {
+          appareilAfficherEcran();
+        }
       });
     }
   }).catch(function(){ appareilAfficherEcran(); });
