@@ -928,6 +928,9 @@ function saveAllReel() {
     // ce map le supprimerait et le cloisonnement serait perdu a chaque
     // sauvegarde.
     frigosData: restoFull('frigosData').map(function(f){ return {id:f.id,nom:f.nom,groupe:f.groupe,icoBg:f.icoBg,ico:f.ico,smin:f.smin,smax:f.smax,lim:f.lim,fait:f.fait,val:f.val,heure:f.heure,signe:f.signe,heureReleve:f.heureReleve,resto:f.resto}; }),
+    // Restaurants deja initialises : evite que les 9 frigos par defaut
+    // reapparaissent apres une suppression volontaire.
+    frigosInit: frigosInit,
     tempReleves: restoFull('tempReleves'),
     dlcItems: restoFull('dlcItems'),
     recepItems: restoFull('recepItems').map(function(r){ var x=Object.assign({},r); x.photoBL=null; return x; }),
@@ -1025,7 +1028,11 @@ function loadAll() {
     if (data.usersData)         usersData         = data.usersData;
     if (data.tafTasks)          tafTasks          = data.tafTasks.map(function(t){ t.timer=null; t.start=null; return t; });
     if (data.prodItems)         prodItems         = data.prodItems;
-    if (data.frigosData)        frigosData        = data.frigosData;
+    // Un tableau vide est « truthy » : « if (data.frigosData) » laissait
+    // passer [] et effacait definitivement les frigos par defaut.
+    // Array.isArray() accepte [] volontairement — c'est frigosInit qui
+    // distingue « jamais configure » de « vide voulu » (cf. deleteFrigo).
+    if (Array.isArray(data.frigosData)) frigosData = data.frigosData;
     if (data.tempReleves)       tempReleves       = data.tempReleves;
     if (data.dlcItems)          dlcItems          = data.dlcItems;
     if (data.recepItems)        recepItems        = data.recepItems;
@@ -1063,6 +1070,7 @@ function loadAll() {
     if (Array.isArray(data.stockControleHistorique)) stockControleHistorique = data.stockControleHistorique;
     if (Array.isArray(data.offlineQueue))            offlineQueue            = data.offlineQueue;
     if (Array.isArray(data.briefLecteurs))           briefLecteurs           = data.briefLecteurs;
+    if (Array.isArray(data.frigosInit))              frigosInit              = data.frigosInit;
     if (data.parametresData)    parametresData    = Object.assign({}, parametresDefaut, data.parametresData);
     // Forcer les noms des restaurants
     parametresData.nomResto1 = 'Resto 1';
@@ -1333,6 +1341,31 @@ var Auth = {
     }); } catch(e){}
     this.restaurantId = infos.restaurantId;
   },
+  // Correspondance durable « restaurant Supabase → emplacement local ».
+  // L'application raisonne en 'resto1'/'resto2' (une douzaine de modules
+  // en dependent) : chaque UUID recoit donc un emplacement, fixe une fois
+  // pour ce restaurant — et non une fois pour l'appareil, ce qui faisait
+  // que TEST_B reutilisait le cloisonnement de TEST_A.
+  CLE_EMPLACEMENTS: 'restopro_restos_locaux',
+
+  emplacementLocal: function(restaurantId){
+    if(!restaurantId) return 'resto1';
+    var map = {};
+    try { map = Storage.get(this.CLE_EMPLACEMENTS, {}) || {}; } catch(e){ map = {}; }
+    if(map[restaurantId]) return map[restaurantId];
+    // Un emplacement n'est JAMAIS partage : on prend le premier numero
+    // libre. Les deux premiers restaurants recoivent 'resto1' et
+    // 'resto2' — les valeurs historiques, attendues par les libelles
+    // existants — et les suivants 'resto3', 'resto4', etc. Le
+    // cloisonnement compare des chaines : tout numero fonctionne.
+    var pris = Object.keys(map).map(function(k){ return map[k]; });
+    var n = 1, libre;
+    do { libre = 'resto' + n; n++; } while(pris.indexOf(libre) !== -1);
+    map[restaurantId] = libre;
+    try { Storage.set(this.CLE_EMPLACEMENTS, map); } catch(e){}
+    return libre;
+  },
+
   oublierAppareil: function(){
     try { Storage.remove(this.CLE_APPAREIL); } catch(e){}
     this.restaurantId = null;
@@ -1444,8 +1477,10 @@ function appareilFinaliser(resto, email){
   // Le restaurant Supabase est un UUID : on le rattache donc a un
   // emplacement local, fixe une fois pour toutes a l'enrolement.
   // Un emplacement deja choisi n'est jamais ecrase.
-  var precedent = Auth.appareilInfos();
-  var emplacement = (precedent && precedent.restoLocal) ? precedent.restoLocal : 'resto1';
+  // L'emplacement suit le restaurant REELLEMENT choisi, pas le premier
+  // enrolement de l'appareil : choisir TEST_B apres TEST_A reutilisait
+  // sinon 'resto1', et les deux restaurants partageaient les memes donnees.
+  var emplacement = Auth.emplacementLocal(resto.id);
 
   Auth.memoriserAppareil({
     email: email, restaurantId: resto.id,
@@ -1724,8 +1759,11 @@ function kLoginSuite(foundUser, viaServeur) {
   if (viaServeur) {
     var appInf = (typeof Auth !== 'undefined') ? Auth.appareilInfos() : null;
     if (appInf && appInf.restaurantNom && parametresData) {
-      if (appInf.restoLocal === 'resto2') parametresData.nomResto2 = appInf.restaurantNom;
-      else                                parametresData.nomResto1 = appInf.restaurantNom;
+      // Le nom est range sous la cle de SON emplacement : nomResto1,
+      // nomResto2, nomResto3… Sans cela, un troisieme restaurant
+      // ecrasait le nom affiche du premier.
+      var slot = appInf.restoLocal || 'resto1';
+      parametresData['nom' + slot.charAt(0).toUpperCase() + slot.slice(1)] = appInf.restaurantNom;
     }
   }
 
@@ -1766,6 +1804,10 @@ function choisirRestoAvecUser(foundUser, resto){
   // Memoriser la session 12 h : permet de rentrer sans reseau
   try { if(typeof Auth !== 'undefined') Auth.memoriser(foundUser, resto); } catch(e){}
   if(typeof restoAppliquerCloisonnement === 'function') restoAppliquerCloisonnement();
+  // Le restaurant est desormais connu : s'il n'a pas encore de frigos,
+  // il recoit ici les siens (copie du modele, ou reprise des anciens
+  // frigos non attribues). Sans restaurant courant, rien n'est fait.
+  try { if(typeof frigosInitialiserResto === 'function') frigosInitialiserResto(); } catch(e){}
   var av = document.getElementById('app-view');
   av.style.display = 'flex';
   av.style.flexDirection = 'column';
@@ -3701,7 +3743,12 @@ function renderChkHistorique(el){
 function closeFrigoModal(){ var m=document.getElementById('frigo-ctrl-modal'); if(m)m.remove(); }
 function closeFrigoConfigFn(){ var o=document.getElementById('frigo-config-overlay'); if(o)o.style.display='none'; renderFrigosList(); }
 
-var frigosData = [
+// ── Modele des frigos par defaut ────────────────────────────
+// Reference servant a initialiser un restaurant qui ne possede
+// encore aucun frigo. Ces objets ne sont jamais utilises tels quels :
+// chaque restaurant en recoit une COPIE independante, sinon valider
+// un releve dans l'un le marquerait fait dans l'autre.
+var FRIGOS_MODELE = [
   {id:1, nom:'CF POSITIVE',       groupe:'CAVE',    icoBg:'#ead5f5',ico:'wine_glass', smin:0,  smax:5,  lim:7,  fait:false,val:null,heure:'07:00'},
   {id:2, nom:'CONGEL CAVE BOIS',  groupe:'CAVE',    icoBg:'#ead5f5',ico:'wine_glass', smin:-25,smax:-18,lim:-15,fait:false,val:null,heure:'07:00'},
   {id:3, nom:'Vitrine a gateaux', groupe:'CUISINE', icoBg:'#fef3cd',ico:'magnifier',  smin:3,  smax:5,  lim:5.5,fait:false,val:null,heure:'07:00'},
@@ -3712,6 +3759,65 @@ var frigosData = [
   {id:8, nom:'LABO FROID',        groupe:'LABO',    icoBg:'#d4f0e8',ico:'pencil',     smin:0,  smax:4,  lim:4,  fait:false,val:null,heure:'07:00'},
   {id:9, nom:'LABO CONGEL',       groupe:'LABO',    icoBg:'#d4f0e8',ico:'pencil',     smin:-25,smax:-18,lim:-15,fait:false,val:null,heure:'07:00'}
 ];
+
+// Copie independante du modele, pour un restaurant donne.
+// baseId evite toute collision d'identifiant entre restaurants.
+function frigosDepuisModele(resto, baseId){
+  return FRIGOS_MODELE.map(function(m, i){
+    var f = {};
+    for(var k in m){ if(Object.prototype.hasOwnProperty.call(m, k)) f[k] = m[k]; }
+    f.id   = baseId + i;
+    f.fait = false;
+    f.val  = null;
+    if(resto) f.resto = resto;
+    return f;
+  });
+}
+
+// Valeur de depart : identique a l'ancienne liste en dur (ids 1 a 9,
+// sans restaurant). Le rattachement se fait a l'ouverture du
+// restaurant, quand celui-ci est enfin connu.
+var frigosData = frigosDepuisModele(null, 1);
+
+// Restaurants dont les frigos ont deja ete initialises. Sans cette
+// liste, supprimer volontairement tous ses frigos les verrait
+// reapparaitre au rechargement suivant.
+var frigosInit = [];
+
+// Donne a un restaurant ses propres frigos — une seule fois.
+//   - il en possede deja            : rien, on note simplement l'initialisation ;
+//   - des frigos non attribues existent (les 9 valeurs par defaut
+//     d'avant le cloisonnement)     : ils lui sont rattaches, sans
+//                                     duplication ni perte ;
+//   - aucun des deux                : copie independante du modele.
+// Appelee a l'ouverture d'un restaurant, apres le cloisonnement.
+function frigosInitialiserResto(){
+  if(!currentResto || currentResto === 'tous') return 0;
+  if(frigosInit.indexOf(currentResto) !== -1) return 0;
+
+  var propres = 0, orphelins = [];
+  (frigosData || []).forEach(function(f){
+    if(!f || typeof f !== 'object') return;
+    if(f.resto === currentResto) propres++;
+    else if(!f.resto)            orphelins.push(f);
+  });
+
+  var n = 0;
+  if(propres === 0){
+    if(orphelins.length){
+      orphelins.forEach(function(f){ f.resto = currentResto; });
+      n = orphelins.length;
+    } else {
+      frigosData = (frigosData || []).concat(frigosDepuisModele(currentResto, Date.now()));
+      n = FRIGOS_MODELE.length;
+    }
+  }
+
+  frigosInit.push(currentResto);
+  saveAll();
+  return n;
+}
+
 var lastTempDate = '';
 var tempOff = 0;
 var tempReleves = []; // historique complet des releves HACCP
@@ -13515,21 +13621,35 @@ function onboardingValiderStep(step){
     var nbFrigosInp = document.getElementById('ob-nb-frigos');
     var nb = parseInt(nbFrigosInp?nbFrigosInp.value:0)||0;
     if(!nb){ showToast('Indiquez le nombre de frigos', 'error'); return; }
-    // Créer les frigos
-    frigosData = [];
+    // Les frigos existants sont conserves, et le guide peut etre
+    // relance sans creer de doublon : un nom deja present pour ce
+    // restaurant est mis a jour (groupe), jamais duplique.
+    // L'ancien « frigosData = [] » effacait toute la configuration.
+    var obCle = function(s){ return String(s||'').trim().toLowerCase(); };
+    var obCrees = 0, obMaj = 0;
     for(var i=0; i<nb; i++){
       var nomFrigoInp = document.getElementById('ob-frigo-'+i);
       var grpInp = document.getElementById('ob-frigo-grp-'+i);
       var nomFrigo = nomFrigoInp?nomFrigoInp.value:'Frigo '+(i+1);
       var grp = grpInp?grpInp.value:'CUISINE';
+      if(!obCle(nomFrigo)) continue;
+      var existant = frigosData.filter(function(f){
+        return f && obCle(f.nom) === obCle(nomFrigo);
+      })[0];
+      if(existant){ existant.groupe = grp; obMaj++; continue; }
       frigosData.push(restoStamp({
         id: Date.now()+i, nom: nomFrigo, groupe: grp,
         smin:-2, smax:4, lim:8, val:null, fait:false,
         heureReleve:'', signe:''
       }));
+      obCrees++;
     }
-    auditEnregistrer('system','Onboarding: '+nb+' frigo(s) configuré(s)', frigosData.map(function(f){return f.nom;}).join(', '), 'Onboarding');
-    showToast('✅ '+nb+' frigo(s) créé(s) !', 'success');
+    // Le restaurant possede maintenant ses frigos : on note son
+    // initialisation pour qu'il ne recoive pas en plus le modele.
+    if(currentResto && currentResto !== 'tous' && frigosInit.indexOf(currentResto) === -1)
+      frigosInit.push(currentResto);
+    auditEnregistrer('system','Onboarding: '+obCrees+' frigo(s) créé(s), '+obMaj+' conservé(s)', frigosData.map(function(f){return f.nom;}).join(', '), 'Onboarding');
+    showToast('✅ '+obCrees+' frigo(s) créé(s)'+(obMaj?' · '+obMaj+' déjà présent(s)':'')+' !', 'success');
   }
 
   if(step.id === 'equipe'){
