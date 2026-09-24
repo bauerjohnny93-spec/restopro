@@ -927,7 +927,7 @@ function saveAllReel() {
     // ecriture. Le champ « resto » est explicitement recopie : sans lui,
     // ce map le supprimerait et le cloisonnement serait perdu a chaque
     // sauvegarde.
-    frigosData: restoFull('frigosData').map(function(f){ return {id:f.id,nom:f.nom,groupe:f.groupe,icoBg:f.icoBg,ico:f.ico,smin:f.smin,smax:f.smax,lim:f.lim,fait:f.fait,val:f.val,heure:f.heure,signe:f.signe,heureReleve:f.heureReleve,resto:f.resto}; }),
+    frigosData: restoFull('frigosData').map(function(f){ return {id:f.id,nom:f.nom,groupe:f.groupe,icoBg:f.icoBg,ico:f.ico,smin:f.smin,smax:f.smax,lim:f.lim,fait:f.fait,val:f.val,heure:f.heure,signe:f.signe,heureReleve:f.heureReleve,resto:f.resto,statut:f.statut,commentaire:f.commentaire}; }),
     // Restaurants deja initialises : evite que les 9 frigos par defaut
     // reapparaissent apres une suppression volontaire.
     frigosInit: frigosInit,
@@ -1850,8 +1850,10 @@ kRefresh();
 // ALERTE TEMPÉRATURE
 // ════════════════════════════════
 function checkTempAlerte() {
-  var done = frigosData ? frigosData.filter(function(f){return f.fait;}).length : 0;
-  var total = frigosData ? frigosData.length : 0;
+  // Les frigos eteints ou en panne ne sont pas des releves attendus.
+  var aRelever = (typeof frigosARelever === 'function') ? frigosARelever() : (frigosData || []);
+  var done = aRelever.filter(function(f){return f.fait;}).length;
+  var total = aRelever.length;
   var allDone = (total > 0 && done === total);
   var existing = document.getElementById('temp-alerte-home');
   if (existing) existing.remove();
@@ -3784,6 +3786,37 @@ var frigosData = frigosDepuisModele(null, 1);
 // reapparaitre au rechargement suivant.
 var frigosInit = [];
 
+// ── STATUT D'UN FRIGO ───────────────────────────────────────
+// 'service' : en fonctionnement, releve de temperature attendu ;
+// 'eteint'  : arret volontaire ;
+// 'panne'   : probleme technique, commentaire libre possible.
+// Un frigo eteint ou en panne n'est NI un releve manquant NI une
+// non-conformite HACCP : il sort des compteurs et des alertes.
+// Les donnees anterieures n'ont pas de champ « statut » : elles sont
+// lues comme 'service', donc le comportement d'origine est conserve.
+var TEMP_STATUTS = {
+  service: {label:'En service', couleur:'#22c55e', fond:'#f0fdf4', ico:'&#10003;'},
+  eteint:  {label:'Éteint',     couleur:'#64748b', fond:'#f1f5f9', ico:'&#9210;'},
+  panne:   {label:'En panne',   couleur:'#f59e0b', fond:'#fffbeb', ico:'&#9888;&#65039;'}
+};
+
+function frigoStatut(f){
+  var s = f && f.statut;
+  return (s === 'eteint' || s === 'panne') ? s : 'service';
+}
+function frigoEnService(f){ return frigoStatut(f) === 'service'; }
+
+// Frigos reellement soumis au releve du jour.
+function frigosARelever(liste){
+  return (liste || frigosData || []).filter(frigoEnService);
+}
+
+// Meme regle pour une ligne d'historique.
+function releveEnService(r){
+  var s = r && r.statut;
+  return !(s === 'eteint' || s === 'panne');
+}
+
 // Donne a un restaurant ses propres frigos — une seule fois.
 //   - il en possede deja            : rien, on note simplement l'initialisation ;
 //   - des frigos non attribues existent (les 9 valeurs par defaut
@@ -3836,9 +3869,12 @@ function renderTemps(){
   var cur=tempGetDate();
   var isToday=(tempOff===0);
   var key=cur.getFullYear()+'-'+cur.getMonth()+'-'+cur.getDate();
+  // Le changement de jour remet a zero le releve, jamais le statut :
+  // un frigo eteint ou en panne le reste jusqu'a remise en service.
   if(isToday&&lastTempDate!==key){frigosData.forEach(function(f){f.fait=false;f.val=null;});lastTempDate=key;}
-  var done=frigosData.filter(function(f){return f.fait;}).length;
-  var total=frigosData.length;
+  var aRelever=frigosARelever();
+  var done=aRelever.filter(function(f){return f.fait;}).length;
+  var total=aRelever.length;
   var jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   var mois=['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre'];
   var el=mc();
@@ -3869,7 +3905,7 @@ function renderTemps(){
   rw.style.cssText='background:#f0fae0;padding:10px 16px 6px';
   rw.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:14px;color:#333">Releve du jour</span><span style="font-size:15px;font-weight:700;color:#1B6FE8">'+done+'/'+total+'</span></div>';
   var pw=document.createElement('div'); pw.style.cssText='height:5px;background:#e0e0e0;border-radius:3px';
-  var pf=document.createElement('div'); pf.style.cssText='height:5px;background:#1B6FE8;border-radius:3px;width:'+Math.round(done/total*100)+'%;transition:width .3s';
+  var pf=document.createElement('div'); pf.style.cssText='height:5px;background:#1B6FE8;border-radius:3px;width:'+(total?Math.round(done/total*100):0)+'%;transition:width .3s';
   pw.appendChild(pf); rw.appendChild(pw);
   el.appendChild(rw);
 
@@ -3946,21 +3982,39 @@ function renderFrigosList(){
   go.forEach(function(g){
     html+='<div style="display:flex;align-items:center;gap:8px;padding:14px 4px 8px"><span style="font-size:16px">'+grIco[g]+'</span><span style="font-size:12px;font-weight:700;color:#888;letter-spacing:.08em">'+g+'</span></div>';
     gr[g].forEach(function(f){
+      var st=frigoStatut(f), cfg=TEMP_STATUTS[st];
+      var hors=(st!=='service');
       var hasV=(f.val!==null&&f.val!==undefined);
       var ok=hasV&&(f.val>=f.smin&&f.val<=f.lim);
-      var lc=hasV?(ok?'#22c55e':'#ef4444'):'#e8e8e8';
-      var bg=hasV?(ok?'#f0fdf4':'#fff5f5'):'#fff';
+      // Hors service : ni vert ni rouge — la couleur du statut.
+      var lc=hors?cfg.couleur:(hasV?(ok?'#22c55e':'#ef4444'):'#e8e8e8');
+      var bg=hors?cfg.fond   :(hasV?(ok?'#f0fdf4':'#fff5f5'):'#fff');
       html+='<div style="background:'+bg+';border-radius:14px;border-left:4px solid '+lc+';margin-bottom:8px;display:flex;align-items:center;padding:11px 12px;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,.07)">';
-      html+='<div style="width:46px;height:46px;border-radius:11px;background:'+f.icoBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+tempIco(f.ico)+'</div>';
-      html+='<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.nom+'</div><div style="font-size:11px;color:#999;margin-top:2px">'+f.smin+'° / '+f.smax+'° — Lim '+f.lim+'°</div></div>';
-      if(hasV){
-        html+='<div style="font-size:18px;font-weight:700;color:'+(ok?'#16a34a':'#dc2626')+';min-width:46px;text-align:center">'+(f.val>=0?'+':'')+f.val+'°</div>';
+      html+='<div style="width:46px;height:46px;border-radius:11px;background:'+f.icoBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0'+(hors?';opacity:.45':'')+'">'+tempIco(f.ico)+'</div>';
+      html+='<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:'+(hors?'#64748b':'#1a1a1a')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.nom+'</div>';
+      if(hors){
+        html+='<div style="display:inline-flex;align-items:center;gap:5px;background:'+cfg.couleur+';color:#fff;font-size:10px;font-weight:800;border-radius:20px;padding:2px 9px;margin-top:4px;letter-spacing:.03em">'+cfg.ico+' '+cfg.label.toUpperCase()+'</div>';
+        if(st==='panne'&&f.commentaire)
+          html+='<div style="font-size:11px;color:#92400e;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.commentaire+'</div>';
+        else if(hasV)
+          html+='<div style="font-size:11px;color:#999;margin-top:3px">Dernier relevé : '+(f.val>=0?'+':'')+f.val+'°</div>';
       } else {
-        html+='<button onclick="controlerFrigo('+f.id+')" style="width:42px;height:42px;border-radius:50%;background:#b8dca0;border:1.5px solid #ddd;color:#bbb;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:300;line-height:1">&#8722;</button>';
+        html+='<div style="font-size:11px;color:#999;margin-top:2px">'+f.smin+'° / '+f.smax+'° — Lim '+f.lim+'°</div>';
       }
-      var cbc=f.fait?(ok?'#22c55e':'#ef4444'):'#ccc';
-      var cbb=f.fait?(ok?'#22c55e':'#ef4444'):'transparent';
-      html+='<div onclick="controlerFrigo('+f.id+')" style="width:32px;height:32px;border-radius:50%;border:2px solid '+cbc+';background:'+cbb+';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;margin-left:2px">'+(f.fait?'&#10003;':'')+'</div>';
+      html+='</div>';
+      if(hors){
+        // Un seul bouton : rouvrir la fiche pour changer le statut.
+        html+='<button onclick="controlerFrigo('+f.id+')" style="background:none;border:1.5px solid '+cfg.couleur+';color:'+cfg.couleur+';border-radius:20px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Modifier</button>';
+      } else {
+        if(hasV){
+          html+='<div style="font-size:18px;font-weight:700;color:'+(ok?'#16a34a':'#dc2626')+';min-width:46px;text-align:center">'+(f.val>=0?'+':'')+f.val+'°</div>';
+        } else {
+          html+='<button onclick="controlerFrigo('+f.id+')" style="width:42px;height:42px;border-radius:50%;background:#b8dca0;border:1.5px solid #ddd;color:#bbb;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:300;line-height:1">&#8722;</button>';
+        }
+        var cbc=f.fait?(ok?'#22c55e':'#ef4444'):'#ccc';
+        var cbb=f.fait?(ok?'#22c55e':'#ef4444'):'transparent';
+        html+='<div onclick="controlerFrigo('+f.id+')" style="width:32px;height:32px;border-radius:50%;border:2px solid '+cbc+';background:'+cbb+';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;margin-left:2px">'+(f.fait?'&#10003;':'')+'</div>';
+      }
       html+='</div>';
     });
   });
@@ -3983,15 +4037,55 @@ function controlerFrigo(id){
       '<div><div style="font-size:16px;font-weight:700">'+f.nom+'</div>'+
       '<div style="font-size:12px;color:#888">'+f.smin+'° / '+f.smax+'° — Lim '+f.lim+'°</div></div>'+
     '</div>'+
-    '<div class="ff"><label>Temperature (°C)</label><input type="number" id="frigo-temp-val" step="0.1" placeholder="ex: 3" style="font-size:28px;font-weight:700;text-align:center;padding:16px;border-radius:14px"></div>'+
-    '<div class="ff"><label>Action corrective</label><input type="text" id="frigo-action" placeholder="Si hors norme..."></div>'+
+    '<div class="ff"><label>État de l\'équipement</label>'+
+      '<div id="frigo-statut-choix" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'+
+        ['service','eteint','panne'].map(function(k){
+          return '<button type="button" id="frigo-st-'+k+'" onclick="frigoChoisirStatut(\''+k+'\')" '+
+            'style="padding:10px 4px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;border:1.5px solid #ddd;background:#fff;color:#888">'+
+            TEMP_STATUTS[k].ico+'<br>'+TEMP_STATUTS[k].label+'</button>';
+        }).join('')+
+      '</div></div>'+
+    '<div class="ff" id="frigo-bloc-temp"><label>Temperature (°C)</label><input type="number" id="frigo-temp-val" step="0.1" placeholder="ex: 3" style="font-size:28px;font-weight:700;text-align:center;padding:16px;border-radius:14px"></div>'+
+    '<div class="ff" id="frigo-bloc-comm" style="display:none"><label>Commentaire (facultatif)</label><input type="text" id="frigo-commentaire" placeholder="ex: groupe froid HS" value="'+String(f.commentaire||'').replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="ff" id="frigo-bloc-action"><label>Action corrective</label><input type="text" id="frigo-action" placeholder="Si hors norme..."></div>'+
     '<div class="ff"><label>Signe par</label><input type="text" id="frigo-signe" value="'+(currentUser||'').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,3)+'" placeholder="Initiales" style="font-size:18px;font-weight:700;letter-spacing:4px;text-align:center"></div>'+
     '<div style="display:flex;gap:10px;margin-top:8px">'+
       '<button onclick="validerFrigo('+id+')" class="btn-blue" style="flex:1;justify-content:center;padding:14px;font-size:15px;font-weight:700;border-radius:14px">Valider</button>'+
       '<button onclick="closeFrigoModal()" class="btn-out" style="padding:14px;border-radius:14px">Annuler</button>'+
     '</div>';
   div.appendChild(inn);document.body.appendChild(div);
-  setTimeout(function(){var e=document.getElementById('frigo-temp-val');if(e)e.focus();},200);
+  frigoChoisirStatut(frigoStatut(f));
+  setTimeout(function(){
+    if(_frigoStatutEnCours!=='service') return;   // pas de clavier si hors service
+    var e=document.getElementById('frigo-temp-val');if(e)e.focus();
+  },200);
+}
+
+// Statut selectionne dans la fiche en cours de saisie.
+var _frigoStatutEnCours = 'service';
+
+// Bascule l'affichage de la fiche selon le statut choisi.
+// 'service' : temperature obligatoire — comportement d'origine.
+// 'eteint'  : aucune temperature.
+// 'panne'   : temperature facultative + commentaire.
+function frigoChoisirStatut(cle){
+  if(!TEMP_STATUTS[cle]) cle = 'service';
+  _frigoStatutEnCours = cle;
+  ['service','eteint','panne'].forEach(function(k){
+    var b=document.getElementById('frigo-st-'+k); if(!b) return;
+    var actif=(k===cle), cfg=TEMP_STATUTS[k];
+    b.style.background = actif ? cfg.couleur : '#fff';
+    b.style.color      = actif ? '#fff'      : '#888';
+    b.style.borderColor= actif ? cfg.couleur : '#ddd';
+  });
+  var bt=document.getElementById('frigo-bloc-temp');
+  var bc=document.getElementById('frigo-bloc-comm');
+  var ba=document.getElementById('frigo-bloc-action');
+  if(bt) bt.style.display = (cle==='eteint') ? 'none' : '';
+  if(bc) bc.style.display = (cle==='panne')  ? ''     : 'none';
+  if(ba) ba.style.display = (cle==='service')? ''     : 'none';
+  var lbl=bt?bt.querySelector('label'):null;
+  if(lbl) lbl.textContent = (cle==='panne') ? 'Temperature (°C) — facultative' : 'Temperature (°C)';
 }
 
 // Lecture d'une temperature saisie. La virgule decimale francaise est
@@ -4010,13 +4104,23 @@ function tempParseVal(txt){
 function validerFrigo(id){
   var f=frigosData.find(function(x){return x.id===id;});
   if(!f)return;
-  var val=tempParseVal(document.getElementById('frigo-temp-val').value);
-  if(isNaN(val)){alert('Entrez une temperature');return;}
-  var action=document.getElementById('frigo-action').value;
+  var statut=(typeof _frigoStatutEnCours!=='undefined')?_frigoStatutEnCours:'service';
+  if(!TEMP_STATUTS[statut]) statut='service';
+  var champ=document.getElementById('frigo-temp-val');
+  var val=(statut==='eteint')?NaN:tempParseVal(champ?champ.value:'');
+  // Temperature obligatoire uniquement en service ; facultative en panne.
+  if(statut==='service'&&isNaN(val)){alert('Entrez une temperature');return;}
+  if(isNaN(val)) val=null;
+  var cInp=document.getElementById('frigo-commentaire');
+  var commentaire=(statut==='panne'&&cInp)?String(cInp.value||'').trim():'';
+  var aInp=document.getElementById('frigo-action');
+  var action=(statut==='service'&&aInp)?aInp.value:'';
   var signe=document.getElementById('frigo-signe')?document.getElementById('frigo-signe').value:'';
-  var ok=(val>=f.smin&&val<=f.lim);
+  // Un frigo hors service n'est jamais une non-conformite HACCP.
+  var ok=(statut!=='service')||(val!==null&&val>=f.smin&&val<=f.lim);
   var now=new Date();
-  f.val=val;f.fait=true;f.signe=signe||'?';f.heureReleve=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  f.val=val;f.fait=true;f.statut=statut;f.commentaire=commentaire;
+  f.signe=signe||'?';f.heureReleve=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   // Archiver dans historique
   tempReleves.push(restoStamp({
     date: now.toISOString().split('T')[0],
@@ -4024,6 +4128,7 @@ function validerFrigo(id){
     frigoId: f.id, frigoNom: f.nom, groupe: f.groupe,
     val: val, smin: f.smin, smax: f.smax, lim: f.lim,
     ok: ok, action: action, signe: signe||'?',
+    statut: statut, commentaire: commentaire, par: currentUser||'',
     resto: currentResto||'resto1'
   }));
   closeFrigoModal();renderFrigosList();setTimeout(checkTempAlerte,100);saveAll();
@@ -4132,21 +4237,23 @@ function tempExportPDF(){
       var d=new Date(date+'T12:00:00');
       var dateLabel=jours[d.getDay()]+" "+d.getDate()+" "+mois[d.getMonth()]+" "+d.getFullYear().toString().slice(2);
       var releves=byDate[date];
-      var nonConformes=releves.filter(function(r){return !r.ok;}).length;
+      var nonConformes=releves.filter(function(r){return releveEnService(r)&&!r.ok;}).length;
       tempRows+="<tr style='background:#e8f0ff'><td colspan='8' style='padding:8px 10px;font-weight:700;font-size:13px;color:#1B6FE8;border:1px solid #ddd'>"+
         dateLabel+" — "+releves.length+" releve(s)"+(nonConformes?" — <span style='color:#e53935'>"+nonConformes+" hors norme</span>":"")+"</td></tr>";
       releves.forEach(function(r){
-        tempRows+="<tr style='background:"+(r.ok?"#f0fff4":"#fff5f5")+"'>"+
+        var rs=r.statut||'service', rHors=(rs==='eteint'||rs==='panne');
+        var rCol=rHors?"#64748b":(r.ok?"#16a34a":"#e53935");
+        var rVal=(r.val===null||r.val===undefined)?"—":((r.val>=0?"+":"")+r.val+"°C");
+        tempRows+="<tr style='background:"+(rHors?"#f8fafc":(r.ok?"#f0fff4":"#fff5f5"))+"'>"+
           "<td style='padding:7px 8px;border:1px solid #ddd;font-size:11px;color:#888'>"+r.groupe+"</td>"+
           "<td style='padding:7px 8px;border:1px solid #ddd;font-weight:600;font-size:12px'>"+r.frigoNom+"</td>"+
           "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:11px;color:#888'>"+r.smin+"° / "+r.lim+"°</td>"+
-          "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:15px;font-weight:800;color:"+(r.ok?"#16a34a":"#e53935")+
-            "'>"+(r.val>=0?"+":"")+r.val+"°C</td>"+
-          "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700;color:"+(r.ok?"#16a34a":"#e53935")+
-            "'>"+(r.ok?"CONFORME":"HORS NORME")+"</td>"+
+          "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:15px;font-weight:800;color:"+rCol+"'>"+rVal+"</td>"+
+          "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700;color:"+rCol+
+            "'>"+(rHors?TEMP_STATUTS[rs].label.toUpperCase():(r.ok?"CONFORME":"HORS NORME"))+"</td>"+
           "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:11px'>"+r.heure+"</td>"+
-          "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700'>"+r.signe+"</td>"+
-          "<td style='padding:7px 8px;border:1px solid #ddd;font-size:11px;color:#888'>"+(r.action||"—")+"</td>"+
+          "<td style='padding:7px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700'>"+(r.par||r.signe||"—")+"</td>"+
+          "<td style='padding:7px 8px;border:1px solid #ddd;font-size:11px;color:#888'>"+(r.commentaire||r.action||"—")+"</td>"+
           "</tr>";
       });
     });
@@ -4172,16 +4279,17 @@ function tempExportPDF(){
   // ── Etat actuel des frigos ──
   var frigoRows="";
   frigosData.forEach(function(f){
+    var st=frigoStatut(f), hors=(st!=='service');
     var hasV=f.val!==null&&f.val!==undefined;
-    var ok=hasV&&(f.val>=f.smin&&f.val<=f.lim);
-    frigoRows+="<tr style='background:"+(hasV?(ok?"#f0fff4":"#fff5f5"):"#fff")+"'>"+
+    var ok=hors||(hasV&&(f.val>=f.smin&&f.val<=f.lim));
+    frigoRows+="<tr style='background:"+(hors?"#f8fafc":(hasV?(ok?"#f0fff4":"#fff5f5"):"#fff"))+"'>"+
       "<td style='padding:8px;border:1px solid #ddd'>"+f.groupe+"</td>"+
       "<td style='padding:8px;border:1px solid #ddd;font-weight:600'>"+f.nom+"</td>"+
       "<td style='padding:8px;border:1px solid #ddd;text-align:center'>"+f.smin+"° / "+f.lim+"°</td>"+
-      "<td style='padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:800;color:"+(hasV?(ok?"#16a34a":"#e53935"):"#888")+
-        "'>"+(hasV?(f.val>=0?"+":"")+f.val+"°C":"Non releve")+"</td>"+
-      "<td style='padding:8px;border:1px solid #ddd;text-align:center;font-weight:700;color:"+(hasV?(ok?"#16a34a":"#e53935"):"#888")+
-        "'>"+(hasV?(ok?"CONFORME":"HORS NORME"):"—")+"</td>"+
+      "<td style='padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:800;color:"+(hors?"#64748b":(hasV?(ok?"#16a34a":"#e53935"):"#888"))+
+        "'>"+(hasV?(f.val>=0?"+":"")+f.val+"°C":(hors?"—":"Non releve"))+"</td>"+
+      "<td style='padding:8px;border:1px solid #ddd;text-align:center;font-weight:700;color:"+(hors?"#64748b":(hasV?(ok?"#16a34a":"#e53935"):"#888"))+
+        "'>"+(hors?TEMP_STATUTS[st].label.toUpperCase()+(st==='panne'&&f.commentaire?" — "+f.commentaire:""):(hasV?(ok?"CONFORME":"HORS NORME"):"—"))+"</td>"+
       "<td style='padding:8px;border:1px solid #ddd;text-align:center'>"+(f.heureReleve||"—")+"</td>"+
       "<td style='padding:8px;border:1px solid #ddd;text-align:center;font-weight:700'>"+(f.signe||"—")+"</td>"+
       "</tr>";
@@ -8036,8 +8144,10 @@ function iaBuildContext(){
     var y=p.length===3?(parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2])):now.getFullYear();
     return Math.round((new Date(y,parseInt(p[1])-1,parseInt(p[0]))-now)/86400000)<=3;
   });
-  var frigosHorsNorme=frigosData.filter(function(f){return f.fait&&f.val!==null&&(f.val<f.smin||f.val>f.lim);});
-  var frigosNonFaits=frigosData.filter(function(f){return !f.fait;});
+  // Frigos eteints ou en panne exclus : ni releve manquant, ni hors norme.
+  var frigosActifs=frigosARelever();
+  var frigosHorsNorme=frigosActifs.filter(function(f){return f.fait&&f.val!==null&&(f.val<f.smin||f.val>f.lim);});
+  var frigosNonFaits=frigosActifs.filter(function(f){return !f.fait;});
   var ventesToday=(ventesData||[]).find(function(v){return v.date===todayStr;});
   var pertesMonth=(pertesData||[]).filter(function(p){return p.date&&p.date.startsWith(monthKey);});
   var pertesMonthCout=pertesMonth.reduce(function(s,p){return s+(p.cout||0);},0);
@@ -8063,7 +8173,9 @@ function iaBuildContext(){
     "DATE: "+todayStr+" | HEURE: "+heureStr,
     "STOCK: "+stockItems.length+" articles | Ruptures: "+stockRuptures.length+stockRuptStr+" | Alertes: "+stockAlertes.length+stockAlrtStr,
     "DLC URGENTES: "+dlcStr,
-    "HACCP: "+frigosData.length+" frigos | Non controles: "+frigosNonFaits.length+frigNfStr+" | Hors norme: "+frigosHorsNorme.length+frigKoStr,
+    "HACCP: "+frigosActifs.length+" frigos en service"+
+      (frigosData.length-frigosActifs.length ? " ("+(frigosData.length-frigosActifs.length)+" eteint(s)/en panne)" : "")+
+      " | Non controles: "+frigosNonFaits.length+frigNfStr+" | Hors norme: "+frigosHorsNorme.length+frigKoStr,
     "VENTES: "+venteTodayStr+" | Mois: CA "+caMois.toFixed(0)+"EUR, "+cvMois+" couverts",
     "PERTES (mois): "+pertesMonth.length+" pertes | Cout: "+pertesMonthCout.toFixed(2)+"EUR",
     "PERSONNEL: "+usersData.filter(function(u){return u.actif;}).length+" employes | Shifts aujourd'hui: "+shiftsToday.length,
@@ -9879,8 +9991,11 @@ function exportHACCPPdf(){
   // Construire HTML du rapport
   var rows = '';
   frigosData.forEach(function(f){
-    var statut = !f.fait ? 'Non releve' : (f.val < f.smin || f.val > f.smax) ? 'HORS NORME' : 'OK';
-    var color = statut==='HORS NORME'?'#e53935':statut==='Non releve'?'#888':'#16a34a';
+    var fs = frigoStatut(f);
+    var statut = (fs!=='service') ? TEMP_STATUTS[fs].label.toUpperCase()
+               : !f.fait ? 'Non releve'
+               : (f.val < f.smin || f.val > f.smax) ? 'HORS NORME' : 'OK';
+    var color = (fs!=='service')?'#64748b':statut==='HORS NORME'?'#e53935':statut==='Non releve'?'#888':'#16a34a';
     rows += '<tr>'+
       '<td style="padding:8px;border:1px solid #ddd">'+f.nom+'</td>'+
       '<td style="padding:8px;border:1px solid #ddd;text-align:center">'+f.groupe+'</td>'+
@@ -10715,7 +10830,7 @@ function renderRapports(){
   sect('🗑️ PERTES','#e53935');
   kpis([{label:'NB',val:pertes.length,col:'#e53935',bg:'#ffebee'},{label:'COÛT',val:pCout>0?pCout.toFixed(2)+'€':'0€',col:pCout>50?'#e53935':'#16a34a',bg:'#f0fae0'},{label:'% CA',val:ca>0?Math.round(pCout/ca*100)+'%':'—',col:pCout/ca>0.03?'#e53935':'#16a34a',bg:'#f0fae0'}]);
   sect('🌡️ HACCP','#9b59b6');
-  kpis([{label:'RELEVÉS',val:tempRel.length,col:'#9b59b6',bg:'#f3e8ff'},{label:'OK',val:tempRel.filter(function(t){return t.ok;}).length,col:'#16a34a',bg:'#e8f5e9'},{label:'KO',val:tempRel.filter(function(t){return !t.ok;}).length,col:'#e53935',bg:'#ffebee'}]);
+  kpis([{label:'RELEVÉS',val:tempRel.length,col:'#9b59b6',bg:'#f3e8ff'},{label:'OK',val:tempRel.filter(function(t){return releveEnService(t)&&t.ok;}).length,col:'#16a34a',bg:'#e8f5e9'},{label:'KO',val:tempRel.filter(function(t){return releveEnService(t)&&!t.ok;}).length,col:'#e53935',bg:'#ffebee'}]);
   var expBtn=document.createElement('button');
   expBtn.style.cssText='width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box';
   expBtn.innerHTML='📤 Exporter ce rapport';
@@ -11499,8 +11614,9 @@ function checkAllAlertsFull(){
   if(dlcExp.length) addNotif('🔴','DLC expirées',dlcExp.length+' produit(s)','critical');
   if(dlcSoon.length) addNotif('🟡','DLC bientôt expirées',dlcSoon.length+' produit(s) dans '+(parametresData.alerteDlcJours||7)+'j','warning');
   // Frigos
-  var frigosKo=(frigosData||[]).filter(function(f){return f.fait&&f.val!==null&&(f.val<f.smin||f.val>f.lim);});
-  var frigosNf=(frigosData||[]).filter(function(f){return !f.fait;});
+  // Hors service : ni releve manquant, ni non-conformite.
+  var frigosKo=frigosARelever().filter(function(f){return f.fait&&f.val!==null&&(f.val<f.smin||f.val>f.lim);});
+  var frigosNf=frigosARelever().filter(function(f){return !f.fait;});
   frigosKo.forEach(function(f){addNotif('🌡️','Frigo hors norme',f.nom+': '+f.val+'°C','critical');});
   if(frigosNf.length) addNotif('🌡️','Frigos non contrôlés',frigosNf.length+' frigo(s)','warning');
   // Stock
@@ -11644,10 +11760,11 @@ function dashRenderMatin(wrap,now,todayStr,monthKey){
   }
 
   // HACCP / Températures
-  var frigosTotal=(frigosData||[]).length;
-  var frigosFaits=(frigosData||[]).filter(function(f){return f.fait;}).length;
-  var frigosKo=(frigosData||[]).filter(function(f){return f.fait&&f.val!==null&&(f.val<f.smin||f.val>f.lim);});
-  var frigosNf=(frigosData||[]).filter(function(f){return !f.fait;});
+  var frigosTotal=frigosARelever().length;
+  var frigosFaits=frigosARelever().filter(function(f){return f.fait;}).length;
+  // Hors service : ni releve manquant, ni non-conformite.
+  var frigosKo=frigosARelever().filter(function(f){return f.fait&&f.val!==null&&(f.val<f.smin||f.val>f.lim);});
+  var frigosNf=frigosARelever().filter(function(f){return !f.fait;});
 
   // DLC (dlcItems + stockItems)
   var dlcExpires=[], dlcProches=[];
