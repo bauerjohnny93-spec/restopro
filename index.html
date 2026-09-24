@@ -3994,10 +3994,23 @@ function controlerFrigo(id){
   setTimeout(function(){var e=document.getElementById('frigo-temp-val');if(e)e.focus();},200);
 }
 
+// Lecture d'une temperature saisie. La virgule decimale francaise est
+// acceptee au meme titre que le point : sur tablette, « 3,5 » etait lu
+// par parseFloat() comme 3, et le releve etait enregistre a 3 °C.
+// Aucun arrondi n'est applique : la valeur est rendue telle quelle.
+//   « 3,5 » → 3.5   « 3.5 » → 3.5   « -18,5 » → -18.5   « 4 » → 4
+function tempParseVal(txt){
+  if(typeof txt === 'number') return isFinite(txt) ? txt : NaN;
+  var s = String(txt === null || txt === undefined ? '' : txt).trim();
+  if(!s) return NaN;
+  s = s.replace(/\s/g, '').replace(',', '.');
+  return parseFloat(s);
+}
+
 function validerFrigo(id){
   var f=frigosData.find(function(x){return x.id===id;});
   if(!f)return;
-  var val=parseFloat(document.getElementById('frigo-temp-val').value);
+  var val=tempParseVal(document.getElementById('frigo-temp-val').value);
   if(isNaN(val)){alert('Entrez une temperature');return;}
   var action=document.getElementById('frigo-action').value;
   var signe=document.getElementById('frigo-signe')?document.getElementById('frigo-signe').value:'';
