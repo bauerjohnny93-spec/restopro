@@ -1808,6 +1808,8 @@ function choisirRestoAvecUser(foundUser, resto){
   // il recoit ici les siens (copie du modele, ou reprise des anciens
   // frigos non attribues). Sans restaurant courant, rien n'est fait.
   try { if(typeof frigosInitialiserResto === 'function') frigosInitialiserResto(); } catch(e){}
+  // Etat du jour courant recalcule depuis l'historique du restaurant.
+  try { if(typeof frigosAppliquerJour === 'function') frigosAppliquerJour(); } catch(e){}
   var av = document.getElementById('app-view');
   av.style.display = 'flex';
   av.style.flexDirection = 'column';
@@ -3743,7 +3745,8 @@ function renderChkHistorique(el){
 // TEMPÉRATURES
 // ════════════════════════════════
 function closeFrigoModal(){ var m=document.getElementById('frigo-ctrl-modal'); if(m)m.remove(); }
-function closeFrigoConfigFn(){ var o=document.getElementById('frigo-config-overlay'); if(o)o.style.display='none'; renderFrigosList(); }
+function closeFrigoConfigFn(){ var o=document.getElementById('frigo-config-overlay'); if(o)o.style.display='none';
+  if(typeof tempVue!=='undefined'&&tempVue==='historique') renderTempHistorique(); else renderFrigosList(); }
 
 // ── Modele des frigos par defaut ────────────────────────────
 // Reference servant a initialiser un restaurant qui ne possede
@@ -3865,15 +3868,105 @@ function tempNavDay(d){tempOff+=d;renderTemps();}
 function tempGoToday(){tempOff=0;renderTemps();}
 function tempGetDate(){var d=new Date();d.setDate(d.getDate()+tempOff);return d;}
 
+// ── ETAT QUOTIDIEN DES RELEVES ──────────────────────────────
+// L'etat (releve fait, temperature, statut, commentaire) appartient a
+// UNE JOURNEE, pas au frigo. Il est donc lu et ecrit dans tempReleves,
+// qui porte deja une date par ligne — aucune nouvelle structure de
+// donnees, et les historiques existants restent lisibles.
+// Les champs f.fait / f.val / f.statut / f.commentaire sont conserves
+// comme cache du JOUR COURANT, pour le Dashboard, les alertes et les
+// exports qui les lisent directement.
+
+// Cle de date locale. toISOString() renvoie la date UTC : passe minuit
+// a Paris, un releve serait date de la veille et ne se retrouverait pas
+// au bon endroit lors de la navigation entre les jours.
+function tempDateCle(d){
+  d = d || new Date();
+  return d.getFullYear() + '-' +
+         String(d.getMonth()+1).padStart(2,'0') + '-' +
+         String(d.getDate()).padStart(2,'0');
+}
+// Journee actuellement consultee dans le module (tempOff).
+function tempDateConsultee(){ return tempDateCle(tempGetDate()); }
+
+// Releve enregistre pour ce frigo ce jour-la, s'il existe.
+// tempReleves est deja cloisonne : il ne contient que le restaurant courant.
+function tempReleveDuJour(frigoId, dateStr){
+  for(var i=tempReleves.length-1; i>=0; i--){
+    var r = tempReleves[i];
+    if(r && r.frigoId === frigoId && r.date === dateStr) return r;
+  }
+  return null;
+}
+
+// Etat d'un frigo pour une date donnee. Sans releve : non controle.
+function tempEtatJour(f, dateStr){
+  var r = f ? tempReleveDuJour(f.id, dateStr) : null;
+  if(!r) return {fait:false, val:null, statut:'service', commentaire:'',
+                 heureReleve:'', signe:'', par:'', action:'', ok:null};
+  var s = (r.statut === 'eteint' || r.statut === 'panne') ? r.statut : 'service';
+  return {
+    fait:true,
+    val:(r.val === undefined ? null : r.val),
+    statut:s,
+    commentaire:r.commentaire || '',
+    heureReleve:r.heure || '',
+    signe:r.signe || '',
+    par:r.par || '',
+    action:r.action || '',
+    ok:r.ok
+  };
+}
+
+// Recopie l'etat du JOUR COURANT sur les objets frigos, pour tout le
+// code qui lit f.fait / f.val / f.statut sans notion de date.
+// Remplace l'ancienne remise a zero destructive : rien n'est perdu,
+// l'etat des autres journees reste dans tempReleves.
+function frigosAppliquerJour(){
+  var jour = tempDateCle();
+  (frigosData || []).forEach(function(f){
+    if(!f || typeof f !== 'object') return;
+    var e = tempEtatJour(f, jour);
+    f.fait        = e.fait;
+    f.val         = e.val;
+    f.statut      = e.statut;
+    f.commentaire = e.commentaire;
+    f.heureReleve = e.heureReleve;
+    if(e.signe) f.signe = e.signe;
+  });
+  lastTempDate = jour;
+}
+
+// Ecrit le releve d'une journee : une ligne par frigo et par jour.
+// Revenir sur une journee deja controlee met a jour SA ligne, sans
+// toucher aux autres journees.
+function tempEnregistrerReleve(f, dateStr, donnees){
+  var exist = tempReleveDuJour(f.id, dateStr);
+  var ligne = exist || restoStamp({
+    date: dateStr, frigoId: f.id, resto: currentResto || 'resto1'
+  });
+  ligne.frigoNom = f.nom; ligne.groupe = f.groupe;
+  ligne.smin = f.smin; ligne.smax = f.smax; ligne.lim = f.lim;
+  ligne.heure = donnees.heure; ligne.val = donnees.val;
+  ligne.ok = donnees.ok; ligne.action = donnees.action;
+  ligne.signe = donnees.signe; ligne.statut = donnees.statut;
+  ligne.commentaire = donnees.commentaire; ligne.par = donnees.par;
+  if(!exist) tempReleves.push(ligne);
+  return ligne;
+}
+
 function renderTemps(){
   var cur=tempGetDate();
   var isToday=(tempOff===0);
   var key=cur.getFullYear()+'-'+cur.getMonth()+'-'+cur.getDate();
-  // Le changement de jour remet a zero le releve, jamais le statut :
-  // un frigo eteint ou en panne le reste jusqu'a remise en service.
-  if(isToday&&lastTempDate!==key){frigosData.forEach(function(f){f.fait=false;f.val=null;});lastTempDate=key;}
-  var aRelever=frigosARelever();
-  var done=aRelever.filter(function(f){return f.fait;}).length;
+  // Le cache du jour courant est resynchronise si la date a change
+  // depuis le dernier affichage (application laissee ouverte la nuit).
+  if(lastTempDate!==tempDateCle()) frigosAppliquerJour();
+  // Compteurs de la JOURNEE CONSULTEE, pas du frigo.
+  var jour=tempDateConsultee();
+  var etats=(frigosData||[]).map(function(f){ return {f:f, e:tempEtatJour(f, jour)}; });
+  var aRelever=etats.filter(function(x){ return x.e.statut==='service'; });
+  var done=aRelever.filter(function(x){ return x.e.fait; }).length;
   var total=aRelever.length;
   var jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   var mois=['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre'];
@@ -3909,12 +4002,22 @@ function renderTemps(){
   pw.appendChild(pf); rw.appendChild(pw);
   el.appendChild(rw);
 
+  // ── Onglets Releve / Historique, reellement cliquables ──
   var tabs=document.createElement('div');
   tabs.style.cssText='background:#f0fae0;display:flex;border-bottom:1.5px solid #ebebeb';
   var pending=total-done;
-  tabs.innerHTML='<div style="flex:1;padding:13px 16px;font-size:15px;font-weight:700;color:#1B6FE8;border-bottom:2.5px solid #1B6FE8;display:flex;align-items:center;gap:8px">Releve'+
-    (pending>0?'<span style="background:#e53935;color:#fff;font-size:11px;font-weight:700;min-width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;padding:0 3px">'+pending+'</span>':'')+
-    '</div><div style="flex:1;padding:13px 16px;font-size:15px;font-weight:500;color:#bbb;text-align:center">Historique</div>';
+  [['releve','Releve'],['historique','Historique']].forEach(function(t){
+    var actif=(tempVue===t[0]);
+    var b=document.createElement('button');
+    b.type='button';
+    b.style.cssText='flex:1;padding:13px 16px;font-size:15px;background:none;border:none;cursor:pointer;'+
+      'display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;'+
+      (actif?'font-weight:700;color:#1B6FE8;border-bottom:2.5px solid #1B6FE8':'font-weight:500;color:#999;border-bottom:2.5px solid transparent');
+    b.innerHTML=t[1]+((t[0]==='releve'&&pending>0)
+      ?'<span style="background:#e53935;color:#fff;font-size:11px;font-weight:700;min-width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;padding:0 3px">'+pending+'</span>':'');
+    b.onclick=(function(v){ return function(){ tempAfficherVue(v); }; })(t[0]);
+    tabs.appendChild(b);
+  });
   el.appendChild(tabs);
 
   var lw=document.createElement('div');
@@ -3969,12 +4072,105 @@ function renderTemps(){
     '</div>';
   ov.appendChild(ob);
   document.body.appendChild(ov);
-  renderFrigosList();
+  if(tempVue==='historique') renderTempHistorique(); else renderFrigosList();
+}
+
+// Onglet actif du module Temperatures.
+var tempVue = 'releve';
+function tempAfficherVue(v){
+  tempVue = (v === 'historique') ? 'historique' : 'releve';
+  renderTemps();
+}
+
+// ── Onglet Historique : tous les releves enregistres, toutes dates ──
+function renderTempHistorique(){
+  var list=document.getElementById('frigos-list');
+  if(!list)return;
+  var jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  var mois=['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre'];
+  var byDate={}, ordre=[];
+  (tempReleves||[]).forEach(function(r){
+    if(!r||!r.date) return;
+    if(!byDate[r.date]){ byDate[r.date]=[]; ordre.push(r.date); }
+    byDate[r.date].push(r);
+  });
+  ordre.sort().reverse();
+  if(!ordre.length){
+    list.innerHTML='<div style="text-align:center;padding:40px 20px;color:#999;font-size:14px">Aucun relevé enregistré pour ce restaurant.</div>';
+    return;
+  }
+  var html='';
+  ordre.forEach(function(date){
+    var p=date.split('-'), d=new Date(+p[0], +p[1]-1, +p[2]);
+    var lignes=byDate[date];
+    var ko=lignes.filter(function(r){ return releveEnService(r) && !r.ok; }).length;
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 4px 8px">'+
+      '<span style="font-size:12px;font-weight:800;color:#1B6FE8;letter-spacing:.04em">'+
+        jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()]+' '+d.getFullYear()+'</span>'+
+      '<span style="font-size:11px;color:'+(ko?'#e53935':'#999')+';font-weight:'+(ko?'700':'500')+'">'+
+        lignes.length+' relevé(s)'+(ko?' · '+ko+' hors norme':'')+'</span></div>';
+    lignes.slice().sort(function(a,b){ return String(a.heure||'').localeCompare(String(b.heure||'')); }).forEach(function(r){
+      var st=(r.statut==='eteint'||r.statut==='panne')?r.statut:'service';
+      var cfg=TEMP_STATUTS[st], hors=(st!=='service');
+      var col=hors?cfg.couleur:(r.ok?'#16a34a':'#e53935');
+      var aV=(r.val!==null&&r.val!==undefined);
+      html+='<div onclick="tempVoirReleve(\''+date+'\','+r.frigoId+')" style="background:'+(hors?cfg.fond:(r.ok?'#f0fdf4':'#fff5f5'))+
+        ';border-radius:12px;border-left:4px solid '+col+';margin-bottom:6px;padding:10px 12px;cursor:pointer">'+
+        '<div style="display:flex;align-items:center;gap:10px">'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-size:13px;font-weight:700;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.frigoNom||'—')+'</div>'+
+            '<div style="font-size:11px;color:#888;margin-top:2px">'+(r.heure||'—')+' · '+(r.groupe||'—')+
+              ((r.par||r.signe)?' · '+(r.par||r.signe):'')+'</div>'+
+          '</div>'+
+          (aV?'<div style="font-size:17px;font-weight:800;color:'+col+';min-width:52px;text-align:right">'+(r.val>=0?'+':'')+r.val+'°</div>':'')+
+        '</div>'+
+        '<div style="display:inline-flex;align-items:center;gap:5px;background:'+col+';color:#fff;font-size:10px;font-weight:800;border-radius:20px;padding:2px 9px;margin-top:6px">'+
+          (hors?cfg.ico+' '+cfg.label.toUpperCase():(r.ok?'CONFORME':'HORS NORME'))+'</div>'+
+        ((r.commentaire||r.action)?'<div style="font-size:11px;color:#92400e;margin-top:5px">'+(r.commentaire||r.action)+'</div>':'')+
+      '</div>';
+    });
+  });
+  list.innerHTML=html;
+}
+
+// Detail d'une ligne d'historique.
+function tempVoirReleve(date, frigoId){
+  var r=tempReleveDuJour(frigoId, date);
+  if(!r) return;
+  var st=(r.statut==='eteint'||r.statut==='panne')?r.statut:'service';
+  var lignes=[
+    ['Frigo', r.frigoNom||'—'],
+    ['Groupe', r.groupe||'—'],
+    ['Date', date],
+    ['Heure', r.heure||'—'],
+    ['Statut', TEMP_STATUTS[st].label],
+    ['Temperature', (r.val===null||r.val===undefined)?'—':((r.val>=0?'+':'')+r.val+' °C')],
+    ['Seuils', (r.smin!==undefined?r.smin+'° / '+r.lim+'°':'—')],
+    ['Conformite', st!=='service'?'Non applicable':(r.ok?'Conforme':'Hors norme')],
+    ['Utilisateur', r.par||r.signe||'—'],
+    ['Commentaire', r.commentaire||'—'],
+    ['Action corrective', r.action||'—']
+  ];
+  var old=document.getElementById('temp-releve-modal'); if(old) old.remove();
+  var div=document.createElement('div');
+  div.id='temp-releve-modal';
+  div.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:6000;display:flex;align-items:flex-end;justify-content:center';
+  var inn=document.createElement('div');
+  inn.style.cssText='background:#f0fae0;border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;max-height:85vh;overflow-y:auto';
+  inn.innerHTML='<div style="width:40px;height:4px;background:#ddd;border-radius:2px;margin:0 auto 16px"></div>'+
+    '<div style="font-size:16px;font-weight:700;margin-bottom:14px">Détail du relevé</div>'+
+    lignes.map(function(l){
+      return '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #e6efd8;font-size:13px">'+
+        '<span style="color:#888">'+l[0]+'</span><strong style="text-align:right">'+l[1]+'</strong></div>';
+    }).join('')+
+    '<button onclick="var m=document.getElementById(\'temp-releve-modal\');if(m)m.remove();" class="btn-blue" style="width:100%;justify-content:center;padding:13px;margin-top:14px;border-radius:14px">Fermer</button>';
+  div.appendChild(inn); document.body.appendChild(div);
 }
 
 function renderFrigosList(){
   var list=document.getElementById('frigos-list');
   if(!list)return;
+  var jourVu=tempDateConsultee();
   var gr={};var go=[];
   frigosData.forEach(function(f){if(!gr[f.groupe]){gr[f.groupe]=[];go.push(f.groupe);}gr[f.groupe].push(f);});
   var grIco={CAVE:'&#127863;',CUISINE:'&#128270;',LABO:'&#9998;&#65039;',AUTRE:'&#10052;&#65039;'};
@@ -3982,10 +4178,12 @@ function renderFrigosList(){
   go.forEach(function(g){
     html+='<div style="display:flex;align-items:center;gap:8px;padding:14px 4px 8px"><span style="font-size:16px">'+grIco[g]+'</span><span style="font-size:12px;font-weight:700;color:#888;letter-spacing:.08em">'+g+'</span></div>';
     gr[g].forEach(function(f){
-      var st=frigoStatut(f), cfg=TEMP_STATUTS[st];
+      // Etat de la JOURNEE CONSULTEE, pas l'etat permanent du frigo.
+      var e=tempEtatJour(f, jourVu);
+      var st=e.statut, cfg=TEMP_STATUTS[st];
       var hors=(st!=='service');
-      var hasV=(f.val!==null&&f.val!==undefined);
-      var ok=hasV&&(f.val>=f.smin&&f.val<=f.lim);
+      var hasV=(e.val!==null&&e.val!==undefined);
+      var ok=hasV&&(e.val>=f.smin&&e.val<=f.lim);
       // Hors service : ni vert ni rouge — la couleur du statut.
       var lc=hors?cfg.couleur:(hasV?(ok?'#22c55e':'#ef4444'):'#e8e8e8');
       var bg=hors?cfg.fond   :(hasV?(ok?'#f0fdf4':'#fff5f5'):'#fff');
@@ -3994,10 +4192,10 @@ function renderFrigosList(){
       html+='<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:'+(hors?'#64748b':'#1a1a1a')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.nom+'</div>';
       if(hors){
         html+='<div style="display:inline-flex;align-items:center;gap:5px;background:'+cfg.couleur+';color:#fff;font-size:10px;font-weight:800;border-radius:20px;padding:2px 9px;margin-top:4px;letter-spacing:.03em">'+cfg.ico+' '+cfg.label.toUpperCase()+'</div>';
-        if(st==='panne'&&f.commentaire)
-          html+='<div style="font-size:11px;color:#92400e;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.commentaire+'</div>';
+        if(st==='panne'&&e.commentaire)
+          html+='<div style="font-size:11px;color:#92400e;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.commentaire+'</div>';
         else if(hasV)
-          html+='<div style="font-size:11px;color:#999;margin-top:3px">Dernier relevé : '+(f.val>=0?'+':'')+f.val+'°</div>';
+          html+='<div style="font-size:11px;color:#999;margin-top:3px">Relevé informatif : '+(e.val>=0?'+':'')+e.val+'°</div>';
       } else {
         html+='<div style="font-size:11px;color:#999;margin-top:2px">'+f.smin+'° / '+f.smax+'° — Lim '+f.lim+'°</div>';
       }
@@ -4007,13 +4205,13 @@ function renderFrigosList(){
         html+='<button onclick="controlerFrigo('+f.id+')" style="background:none;border:1.5px solid '+cfg.couleur+';color:'+cfg.couleur+';border-radius:20px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Modifier</button>';
       } else {
         if(hasV){
-          html+='<div style="font-size:18px;font-weight:700;color:'+(ok?'#16a34a':'#dc2626')+';min-width:46px;text-align:center">'+(f.val>=0?'+':'')+f.val+'°</div>';
+          html+='<div style="font-size:18px;font-weight:700;color:'+(ok?'#16a34a':'#dc2626')+';min-width:46px;text-align:center">'+(e.val>=0?'+':'')+e.val+'°</div>';
         } else {
           html+='<button onclick="controlerFrigo('+f.id+')" style="width:42px;height:42px;border-radius:50%;background:#b8dca0;border:1.5px solid #ddd;color:#bbb;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:300;line-height:1">&#8722;</button>';
         }
-        var cbc=f.fait?(ok?'#22c55e':'#ef4444'):'#ccc';
-        var cbb=f.fait?(ok?'#22c55e':'#ef4444'):'transparent';
-        html+='<div onclick="controlerFrigo('+f.id+')" style="width:32px;height:32px;border-radius:50%;border:2px solid '+cbc+';background:'+cbb+';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;margin-left:2px">'+(f.fait?'&#10003;':'')+'</div>';
+        var cbc=e.fait?(ok?'#22c55e':'#ef4444'):'#ccc';
+        var cbb=e.fait?(ok?'#22c55e':'#ef4444'):'transparent';
+        html+='<div onclick="controlerFrigo('+f.id+')" style="width:32px;height:32px;border-radius:50%;border:2px solid '+cbc+';background:'+cbb+';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;margin-left:2px">'+(e.fait?'&#10003;':'')+'</div>';
       }
       html+='</div>';
     });
@@ -4024,6 +4222,10 @@ function renderFrigosList(){
 function controlerFrigo(id){
   var f=frigosData.find(function(x){return x.id===id;});
   if(!f)return;
+  // Fiche de la JOURNEE CONSULTEE : revenir sur un jour deja controle
+  // reaffiche son statut, sa temperature et son commentaire.
+  var jourVu=tempDateConsultee();
+  var etatJ=tempEtatJour(f, jourVu);
   var old=document.getElementById('frigo-ctrl-modal');if(old)old.remove();
   var div=document.createElement('div');
   div.id='frigo-ctrl-modal';
@@ -4045,16 +4247,16 @@ function controlerFrigo(id){
             TEMP_STATUTS[k].ico+'<br>'+TEMP_STATUTS[k].label+'</button>';
         }).join('')+
       '</div></div>'+
-    '<div class="ff" id="frigo-bloc-temp"><label>Temperature (°C)</label><input type="number" id="frigo-temp-val" step="0.1" placeholder="ex: 3" style="font-size:28px;font-weight:700;text-align:center;padding:16px;border-radius:14px"></div>'+
-    '<div class="ff" id="frigo-bloc-comm" style="display:none"><label>Commentaire (facultatif)</label><input type="text" id="frigo-commentaire" placeholder="ex: groupe froid HS" value="'+String(f.commentaire||'').replace(/"/g,'&quot;')+'"></div>'+
-    '<div class="ff" id="frigo-bloc-action"><label>Action corrective</label><input type="text" id="frigo-action" placeholder="Si hors norme..."></div>'+
+    '<div class="ff" id="frigo-bloc-temp"><label>Temperature (°C)</label><input type="number" id="frigo-temp-val" step="0.1" placeholder="ex: 3" value="'+((etatJ.val===null||etatJ.val===undefined)?'':etatJ.val)+'" style="font-size:28px;font-weight:700;text-align:center;padding:16px;border-radius:14px"></div>'+
+    '<div class="ff" id="frigo-bloc-comm" style="display:none"><label>Commentaire (facultatif)</label><input type="text" id="frigo-commentaire" placeholder="ex: groupe froid HS" value="'+String(etatJ.commentaire||'').replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="ff" id="frigo-bloc-action"><label>Action corrective</label><input type="text" id="frigo-action" placeholder="Si hors norme..." value="'+String(etatJ.action||'').replace(/"/g,'&quot;')+'"></div>'+
     '<div class="ff"><label>Signe par</label><input type="text" id="frigo-signe" value="'+(currentUser||'').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,3)+'" placeholder="Initiales" style="font-size:18px;font-weight:700;letter-spacing:4px;text-align:center"></div>'+
     '<div style="display:flex;gap:10px;margin-top:8px">'+
       '<button onclick="validerFrigo('+id+')" class="btn-blue" style="flex:1;justify-content:center;padding:14px;font-size:15px;font-weight:700;border-radius:14px">Valider</button>'+
       '<button onclick="closeFrigoModal()" class="btn-out" style="padding:14px;border-radius:14px">Annuler</button>'+
     '</div>';
   div.appendChild(inn);document.body.appendChild(div);
-  frigoChoisirStatut(frigoStatut(f));
+  frigoChoisirStatut(etatJ.statut);
   setTimeout(function(){
     if(_frigoStatutEnCours!=='service') return;   // pas de clavier si hors service
     var e=document.getElementById('frigo-temp-val');if(e)e.focus();
@@ -4119,19 +4321,21 @@ function validerFrigo(id){
   // Un frigo hors service n'est jamais une non-conformite HACCP.
   var ok=(statut!=='service')||(val!==null&&val>=f.smin&&val<=f.lim);
   var now=new Date();
-  f.val=val;f.fait=true;f.statut=statut;f.commentaire=commentaire;
-  f.signe=signe||'?';f.heureReleve=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  // Archiver dans historique
-  tempReleves.push(restoStamp({
-    date: now.toISOString().split('T')[0],
-    heure: String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'),
-    frigoId: f.id, frigoNom: f.nom, groupe: f.groupe,
-    val: val, smin: f.smin, smax: f.smax, lim: f.lim,
-    ok: ok, action: action, signe: signe||'?',
-    statut: statut, commentaire: commentaire, par: currentUser||'',
-    resto: currentResto||'resto1'
-  }));
-  closeFrigoModal();renderFrigosList();setTimeout(checkTempAlerte,100);saveAll();
+  var heure=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  // Le releve est ecrit sur la JOURNEE CONSULTEE, et sur elle seule.
+  // Revenir sur un jour deja controle met a jour sa ligne ; les autres
+  // journees ne sont jamais touchees.
+  var jourVu=tempDateConsultee();
+  tempEnregistrerReleve(f, jourVu, {
+    heure: heure, val: val, ok: ok, action: action,
+    signe: signe||'?', statut: statut, commentaire: commentaire,
+    par: currentUser||''
+  });
+  // Le cache porte toujours l'etat du jour courant.
+  frigosAppliquerJour();
+  closeFrigoModal();
+  if(tempVue==='historique') renderTempHistorique(); else renderFrigosList();
+  setTimeout(checkTempAlerte,100);saveAll();
   if(!ok){
     var al=document.createElement('div');
     al.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:7000;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -13480,6 +13684,7 @@ function restoAttribuerNonAttribuees(cible){
 
 loadAll();
 restoAppliquerCloisonnement();
+try { frigosAppliquerJour(); } catch(e){}
 // Conversion des roles herites (Manager -> Responsable) ; n'ecrit
 // que si une conversion a reellement eu lieu.
 try { normaliserRoles(); } catch(e){}
