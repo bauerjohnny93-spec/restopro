@@ -5957,14 +5957,18 @@ function recepOpenFicheReception(fourn, dateVal){
   }
 
   function validerSession(avecBL){
-    var temp = parseFloat(document.getElementById('recep-temp')?document.getElementById('recep-temp').value:0)||null;
+    var temp = recepNombre(document.getElementById('recep-temp')?document.getElementById('recep-temp').value:'');
     var conforme = document.getElementById('recep-conforme')?document.getElementById('recep-conforme').value:'conforme';
     var obs = document.getElementById('recep-obs')?document.getElementById('recep-obs').value:'';
     var now = new Date();
     var statut = conforme==='conforme'?'validee':conforme==='non_conforme'?'critique':'alerte';
 
+    // Meme logique que la saisie manuelle : conformite booleenne,
+    // quantite et temperature lues par recepNombre (0 conserve, virgule
+    // acceptee, champ vide = null).
     var prods = session.etiquettes.map(function(e){
-      return {nom:e.nom, qte:e.poids||1, lot:e.lot||'', dlc:e.dlc||'', temp:temp, conforme:conforme==='conforme'?'conforme':'non_conforme'};
+      return {nom:e.nom, qte:recepNombre(e.poids), lot:e.lot||'', dlc:e.dlc||'',
+              temp:temp, conforme:(conforme==='conforme')};
     });
 
     var recep = {
@@ -5993,7 +5997,8 @@ function recepOpenFicheReception(fourn, dateVal){
     // → STOCK : ajouter chaque produit scanné
     prods.forEach(function(p){
       if(!p.nom) return;
-      var qty = parseFloat(p.qte)||1;
+      // Quantite non renseignee : 0 ajoute, jamais 1 invente.
+      var qty = (p.qte===null||p.qte===undefined)?0:p.qte;
       var existing = stockItems.find(function(s){return s.nom.toLowerCase()===p.nom.toLowerCase();});
       if(existing){
         existing.qte = Math.round((existing.qte+qty)*100)/100;
@@ -6035,9 +6040,22 @@ function recepSetPhotoBL(input){
   reader.readAsDataURL(file);
 }
 
+// Lecture d'un nombre saisi dans une reception (temperature, quantite).
+// Trois regles : la virgule decimale francaise est acceptee, la valeur
+// 0 est conservee telle quelle, et un champ vide vaut null.
+// L'ancien « parseFloat(x)||null » transformait 0 en null et « 4,5 » en 4.
+function recepNombre(txt){
+  var v = tempParseVal(txt);
+  return isNaN(v) ? null : v;
+}
+
 function recepAjouterProduitLigne(container){
   var idx=container.children.length+1;
   var row=document.createElement('div');
+  // Etat de conformite porte par la ligne elle-meme. Il etait auparavant
+  // devine en relisant la couleur du bouton, ce que le navigateur renvoie
+  // en « rgb(255, 235, 238) » : le choix « Non conforme » etait perdu.
+  row.setAttribute('data-conforme','ok');
   row.style.cssText='background:#fff;border:1.5px solid #dde8c8;border-radius:12px;padding:12px;margin-bottom:8px;position:relative';
   row.innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
@@ -6070,6 +6088,7 @@ function recepAjouterProduitLigne(container){
 
 function recepToggleConformite(btn,type){
   var row=btn.parentNode.parentNode;
+  row.setAttribute('data-conforme', type==='ko' ? 'ko' : 'ok');
   var okBtn=row.querySelector('.rp-conforme-ok');
   var koBtn=row.querySelector('.rp-conforme-ko');
   if(type==='ok'){
@@ -6084,7 +6103,7 @@ function recepToggleConformite(btn,type){
 }
 
 function recepValiderFiche(fourn,dateVal,overlay){
-  var temp=parseFloat(document.getElementById('recep-temp').value)||null;
+  var temp=recepNombre(document.getElementById('recep-temp').value);
   var conforme=document.getElementById('recep-conforme').value;
   var obs=document.getElementById('recep-obs').value;
   var signe=document.getElementById('recep-signe').value||currentUser||'—';
@@ -6100,9 +6119,14 @@ function recepValiderFiche(fourn,dateVal,overlay){
       var lot=row.querySelector('.rp-lot');
       var dlc=row.querySelector('.rp-dlc');
       var tempP=row.querySelector('.rp-temp');
-      var isKo=row.querySelector('.rp-conforme-ko').style.background.indexOf('ffebee')>=0;
+      // Etat lu sur la ligne, plus sur la couleur du bouton.
+      var isKo=row.getAttribute('data-conforme')==='ko';
       if(nom&&nom.value.trim()){
-        prods.push({nom:nom.value.trim(),qte:qte?qte.value:'',lot:lot?lot.value:'',dlc:dlc?dlc.value:'',temp:tempP?tempP.value:'',conforme:isKo?'non_conforme':'conforme'});
+        prods.push({nom:nom.value.trim(),
+                    qte:recepNombre(qte?qte.value:''),
+                    lot:lot?lot.value:'',dlc:dlc?dlc.value:'',
+                    temp:recepNombre(tempP?tempP.value:''),
+                    conforme:!isKo});
       }
     });
   }
@@ -6137,7 +6161,9 @@ function recepValiderFiche(fourn,dateVal,overlay){
   // Ajouter au stock + enregistrer mouvements
   prods.forEach(function(p){
     if(!p.nom)return;
-    var qty=parseFloat(p.qte)||1;
+    // Quantite non renseignee : on n'invente plus 1 kg, on ajoute 0.
+    // La ligne reste tracee dans la reception et dans les mouvements.
+    var qty=(p.qte===null||p.qte===undefined)?0:p.qte;
     var existing=stockItems.find(function(s){return s.nom.toLowerCase()===p.nom.toLowerCase();});
     if(existing){
       existing.qte=Math.round((existing.qte+qty)*100)/100;
@@ -6221,7 +6247,8 @@ function recepVoirDetail(id){
     wrap.appendChild(prodsTitle);
     r.lignesProduits.forEach(function(p){
       var pCard=document.createElement('div');
-      var isKo=p.conforme==='non_conforme';
+      // Nouvelles donnees : booleen. Anciennes : chaine 'non_conforme'.
+      var isKo=(p.conforme===false||p.conforme==='non_conforme');
       pCard.style.cssText='background:#f0fae0;border:1.5px solid '+(isKo?'#e53935':'#dde8c8')+';border-radius:12px;padding:11px 12px;margin-bottom:8px';
       pCard.innerHTML=
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'+
@@ -6229,10 +6256,11 @@ function recepVoirDetail(id){
           '<span style="background:'+(isKo?'#ffebee':'#e8f5e9')+';color:'+(isKo?'#e53935':'#16a34a')+';border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700">'+(isKo?'Non conforme':'Conforme')+'</span>'+
         '</div>'+
         '<div style="font-size:11px;color:#888;display:flex;gap:12px;flex-wrap:wrap">'+
-          (p.qte?'<span>&#9878; '+p.qte+'</span>':'')+
+          // 0 est une quantite valable : on ne la masque pas.
+          ((p.qte!==null&&p.qte!==undefined&&p.qte!=='')?'<span>&#9878; '+p.qte+'</span>':'')+
           (p.lot?'<span>Lot: '+p.lot+'</span>':'')+
           (p.dlc?'<span>DLC: '+p.dlc+'</span>':'')+
-          (p.temp?'<span>'+p.temp+'°C</span>':'')+
+          ((p.temp!==null&&p.temp!==undefined&&p.temp!=='')?'<span>'+p.temp+'°C</span>':'')+
         '</div>';
       wrap.appendChild(pCard);
     });
