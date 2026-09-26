@@ -3744,7 +3744,13 @@ function renderChkHistorique(el){
 // ════════════════════════════════
 // TEMPÉRATURES
 // ════════════════════════════════
-function closeFrigoModal(){ var m=document.getElementById('frigo-ctrl-modal'); if(m)m.remove(); }
+function closeFrigoModal(){ var m=document.getElementById('frigo-ctrl-modal'); if(m)m.remove();
+  _frigoDateEnCours = null; }
+
+// Journee visee par la fiche ouverte. Vaut la journee consultee dans
+// le module, sauf quand la fiche est ouverte depuis l'historique pour
+// corriger le releve d'un autre jour.
+var _frigoDateEnCours = null;
 function closeFrigoConfigFn(){ var o=document.getElementById('frigo-config-overlay'); if(o)o.style.display='none';
   if(typeof tempVue!=='undefined'&&tempVue==='historique') renderTempHistorique(); else renderFrigosList(); }
 
@@ -3888,6 +3894,17 @@ function tempDateCle(d){
 }
 // Journee actuellement consultee dans le module (tempOff).
 function tempDateConsultee(){ return tempDateCle(tempGetDate()); }
+
+// « 2026-09-24 » → « jeudi 24 septembre 2026 »
+function tempDateLisible(dateStr){
+  var j=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+  var m=['janvier','fevrier','mars','avril','mai','juin','juillet','aout',
+         'septembre','octobre','novembre','decembre'];
+  var p=String(dateStr||'').split('-');
+  if(p.length!==3) return dateStr||'';
+  var d=new Date(+p[0], +p[1]-1, +p[2]);
+  return j[d.getDay()]+' '+d.getDate()+' '+m[d.getMonth()]+' '+d.getFullYear();
+}
 
 // Releve enregistre pour ce frigo ce jour-la, s'il existe.
 // tempReleves est deja cloisonne : il ne contient que le restaurant courant.
@@ -4163,8 +4180,28 @@ function tempVoirReleve(date, frigoId){
       return '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #e6efd8;font-size:13px">'+
         '<span style="color:#888">'+l[0]+'</span><strong style="text-align:right">'+l[1]+'</strong></div>';
     }).join('')+
-    '<button onclick="var m=document.getElementById(\'temp-releve-modal\');if(m)m.remove();" class="btn-blue" style="width:100%;justify-content:center;padding:13px;margin-top:14px;border-radius:14px">Fermer</button>';
+    '<button onclick="tempModifierReleve(\''+date+'\','+frigoId+')" class="btn-blue" style="width:100%;justify-content:center;padding:13px;margin-top:16px;border-radius:14px;font-weight:700">Modifier le relevé</button>'+
+    '<button onclick="tempFermerDetailReleve()" class="btn-out" style="width:100%;justify-content:center;padding:13px;margin-top:8px;border-radius:14px">Fermer</button>';
   div.appendChild(inn); document.body.appendChild(div);
+}
+
+function tempFermerDetailReleve(){
+  var m=document.getElementById('temp-releve-modal'); if(m) m.remove();
+}
+
+// Corrige un releve depuis l'historique : rouvre la fiche de saisie
+// habituelle, mais ciblee sur la date de ce releve. La validation passe
+// par validerFrigo(), qui met a jour la ligne existante — pas de
+// doublon pour un meme restaurant + date + frigo.
+function tempModifierReleve(date, frigoId){
+  var f=(frigosData||[]).find(function(x){ return x.id===frigoId; });
+  if(!f){
+    if(typeof showToast==='function')
+      showToast('Ce frigo n\'existe plus dans ce restaurant','error',3000);
+    return;
+  }
+  tempFermerDetailReleve();
+  controlerFrigo(frigoId, date);
 }
 
 function renderFrigosList(){
@@ -4219,12 +4256,15 @@ function renderFrigosList(){
   list.innerHTML=html;
 }
 
-function controlerFrigo(id){
+function controlerFrigo(id, dateStr){
   var f=frigosData.find(function(x){return x.id===id;});
   if(!f)return;
-  // Fiche de la JOURNEE CONSULTEE : revenir sur un jour deja controle
-  // reaffiche son statut, sa temperature et son commentaire.
-  var jourVu=tempDateConsultee();
+  // Fiche de la JOURNEE VISEE : la journee consultee par defaut, ou
+  // celle du releve quand la fiche est ouverte depuis l'historique.
+  // Revenir sur un jour deja controle reaffiche son statut, sa
+  // temperature, son commentaire et son action corrective.
+  var jourVu=dateStr||tempDateConsultee();
+  _frigoDateEnCours=jourVu;
   var etatJ=tempEtatJour(f, jourVu);
   var old=document.getElementById('frigo-ctrl-modal');if(old)old.remove();
   var div=document.createElement('div');
@@ -4239,6 +4279,12 @@ function controlerFrigo(id){
       '<div><div style="font-size:16px;font-weight:700">'+f.nom+'</div>'+
       '<div style="font-size:12px;color:#888">'+f.smin+'° / '+f.smax+'° — Lim '+f.lim+'°</div></div>'+
     '</div>'+
+    // Correction depuis l'historique : la date visee est rappelee, pour
+    // qu'on ne croie jamais saisir le releve du jour.
+    (jourVu!==tempDateCle()
+      ? '<div style="background:#e8f0ff;border-left:4px solid #1B6FE8;border-radius:10px;padding:9px 12px;margin-bottom:14px;font-size:12px;color:#1B6FE8;font-weight:600">'+
+        'Relevé du '+tempDateLisible(jourVu)+'</div>'
+      : '')+
     '<div class="ff"><label>État de l\'équipement</label>'+
       '<div id="frigo-statut-choix" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'+
         ['service','eteint','panne'].map(function(k){
@@ -4325,7 +4371,7 @@ function validerFrigo(id){
   // Le releve est ecrit sur la JOURNEE CONSULTEE, et sur elle seule.
   // Revenir sur un jour deja controle met a jour sa ligne ; les autres
   // journees ne sont jamais touchees.
-  var jourVu=tempDateConsultee();
+  var jourVu=_frigoDateEnCours||tempDateConsultee();
   tempEnregistrerReleve(f, jourVu, {
     heure: heure, val: val, ok: ok, action: action,
     signe: signe||'?', statut: statut, commentaire: commentaire,
