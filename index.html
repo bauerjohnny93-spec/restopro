@@ -1997,9 +1997,16 @@ function removeFab() {
 // ── Helper API Anthropic — résistant WiFi + 4G/5G ──
 function geminiCall(prompt, imageB64, imageMime){
   var apiKey = (parametresData&&parametresData.anthropicApiKey)||'';
-  if(!apiKey) return Promise.reject(new Error('Clé API Gemini manquante'));
-  var model = imageB64 ? 'gemini-1.5-flash' : 'gemini-1.5-flash';
-  var url = 'https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+apiKey;
+  if(!apiKey){
+    var eCle = new Error('Clé API Gemini manquante');
+    eCle.code = 'CLE_MANQUANTE';
+    return Promise.reject(eCle);
+  }
+  var model = 'gemini-1.5-flash';
+  // La cle voyage dans l'URL : c'est l'usage impose par l'API Gemini.
+  // Elle est encodee, et n'est jamais affichee ni journalisee.
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/'+model+
+            ':generateContent?key='+encodeURIComponent(apiKey);
   var parts = [];
   if(imageB64) parts.push({inline_data:{mime_type:imageMime||'image/jpeg',data:imageB64}});
   parts.push({text: prompt});
@@ -2007,11 +2014,29 @@ function geminiCall(prompt, imageB64, imageMime){
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({contents:[{parts:parts}],generationConfig:{maxOutputTokens:1500}})
-  })  .then(function(data){
-    if(data.error) throw new Error(data.error.message||'Erreur Gemini');
-    var text = data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]?data.candidates[0].content.parts[0].text:'';
-    // Retourner au format compatible avec l'ancien code Anthropic
-    return {content:[{text:text}]};
+  }).then(function(rep){
+    // fetch() resout avec une Response, pas avec le JSON : sans cette
+    // lecture, data.candidates etait toujours undefined et la fonction
+    // renvoyait un texte vide meme quand Gemini avait repondu.
+    return rep.text().then(function(brut){
+      var data = {};
+      try { data = JSON.parse(brut||'{}'); } catch(e){ data = {}; }
+      if(!rep.ok){
+        // Le vrai motif renvoye par Google, au lieu d'un message generique.
+        throw new Error((data.error&&data.error.message) || ('HTTP '+rep.status));
+      }
+      if(data.error) throw new Error(data.error.message||'Erreur Gemini');
+      var cand = data.candidates && data.candidates[0];
+      var text = cand&&cand.content&&cand.content.parts&&cand.content.parts[0]
+                 ? cand.content.parts[0].text : '';
+      if(!text){
+        var motif = (cand&&cand.finishReason) ||
+                    (data.promptFeedback&&data.promptFeedback.blockReason) || '';
+        throw new Error('Réponse vide'+(motif?' ('+motif+')':''));
+      }
+      // Format compatible avec l'ancien code Anthropic
+      return {content:[{text:text}]};
+    });
   });
 }
 
@@ -5876,9 +5901,16 @@ function recepOpenFicheReception(fourn, dateVal){
         session._lastPhoto = null;
         renderScanEtiquettes();
       })
-      .catch(function(){
+      .catch(function(err){
+        // Message differencie : « clé API » n'etait pas toujours la cause.
+        // Le detail technique va dans la console ; la cle n'y figure jamais.
+        var msg = String((err&&err.message)||'erreur inconnue');
+        var aff = (err&&err.code==='CLE_MANQUANTE')
+          ? 'Aucune clé API configurée — Paramètres → Clé API (AIza…)'
+          : 'Analyse impossible — ' + msg;
+        try { console.warn('Analyse étiquette :', msg); } catch(e){}
         var iz2 = document.getElementById('etiq-ia-zone');
-        if(iz2) iz2.innerHTML = '<div style="background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700">❌ Erreur — Vérifiez votre clé API dans Paramètres</div>';
+        if(iz2) iz2.innerHTML = '<div style="background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700">❌ '+aff+'</div>';
       });
   }
 
@@ -11762,7 +11794,10 @@ function renderParametres(){
 
     // Statut actuel
     var statutDiv=document.createElement('div');
-    var hasKey=!!(parametresData.anthropicApiKey&&parametresData.anthropicApiKey.startsWith('sk-'));
+    // Le projet est passe a Gemini : une cle commence par « AIza »,
+    // plus par « sk- » (ancien format Anthropic). Le statut restait donc
+    // rouge meme avec une cle correcte.
+    var hasKey=!!(parametresData.anthropicApiKey&&parametresData.anthropicApiKey.startsWith('AIza'));
     statutDiv.style.cssText='background:'+(hasKey?'#e8f5e9':'#ffebee')+';border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;font-weight:700;color:'+(hasKey?'#16a34a':'#e53935');
     statutDiv.textContent=hasKey?'✅ Clé Gemini configurée — IA fonctionnelle':'❌ Aucune clé — IA non disponible';
     wrap.appendChild(statutDiv);
@@ -11772,7 +11807,11 @@ function renderParametres(){
     saveBtn.textContent='💾 Sauvegarder la clé';
     saveBtn.onclick=function(){
       var key=document.getElementById('param-api-key').value.trim();
-      if(key&&!key.startsWith('AIza') || key.length > 20){showToast('Clé invalide — doit commencer par AIza...','error');return;}
+      // La condition precedente etait « key && !startsWith('AIza') || key.length > 20 ».
+      // « && » liant plus fort que « || », elle se lisait
+      // « (…) OU (longueur > 20) » : une vraie cle Gemini faisant 39
+      // caracteres, TOUTE cle valide etait refusee a l'enregistrement.
+      if(key && !key.startsWith('AIza')){showToast('Clé invalide — doit commencer par AIza...','error');return;}
       parametresData.anthropicApiKey=key;
       saveAll();
       showToast(key?'✅ Clé API sauvegardée !':'Clé supprimée','success');
