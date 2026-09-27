@@ -5738,7 +5738,7 @@ function recepOpenFicheReception(fourn, dateVal){
     hdr.style.cssText = 'background:#1B6FE8;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0';
     var bk = document.createElement('button');
     bk.style.cssText = 'background:rgba(255,255,255,.2);border:none;color:#fff;font-size:22px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0';
-    bk.innerHTML = '&#8592;'; bk.onclick = function(){ ov.remove(); };
+    bk.innerHTML = '&#8592;'; bk.onclick = function(){ camArreter(); ov.remove(); };
     hdr.appendChild(bk);
     var hi = document.createElement('div'); hi.style.cssText = 'flex:1';
     hi.innerHTML = '<div style="font-size:16px;font-weight:700;color:#fff">Réception — scan</div><div style="font-size:12px;color:rgba(255,255,255,.8)">'+fourn+' · '+dateVal+'</div>';
@@ -5799,63 +5799,177 @@ function recepOpenFicheReception(fourn, dateVal){
     var btns = document.createElement('div');
     btns.style.cssText = 'background:#f0fae0;border-top:1px solid #dde8c8;padding:12px 14px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;flex-shrink:0';
 
-    // Bouton SHOOT
-    var shootLabel = document.createElement('label');
-    shootLabel.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;background:#1B6FE8;color:#fff;border-radius:14px;padding:16px;font-size:16px;font-weight:800;cursor:pointer;width:100%;box-sizing:border-box';
-    var shootSpan = document.createElement('span'); shootSpan.textContent = '📷';
-    var shootTxt = document.createTextNode(' SHOOT');
-    var shootInp = document.createElement('input'); shootInp.type='file'; shootInp.accept='image/*'; shootInp.capture='environment'; shootInp.style.display='none';
-    shootLabel.appendChild(shootSpan); shootLabel.appendChild(shootTxt); shootLabel.appendChild(shootInp);
-    btns.appendChild(shootLabel);
+    // Bouton de capture : declenche la prise de vue sur le flux camera
+    var photoBtn = document.createElement('button');
+    photoBtn.id = 'etiq-btn-photo';
+    photoBtn.type = 'button';
+    photoBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;background:#1B6FE8;color:#fff;border:none;border-radius:14px;padding:16px;font-size:16px;font-weight:800;cursor:pointer;width:100%;box-sizing:border-box;min-height:56px';
+    photoBtn.innerHTML = '&#128247; Prendre la photo';
+    photoBtn.onclick = function(){ camCapturer(); };
+    btns.appendChild(photoBtn);
+
+    // Reprendre : relance la camera apres une capture
+    var reprendreBtn = document.createElement('button');
+    reprendreBtn.id = 'etiq-btn-reprendre';
+    reprendreBtn.type = 'button';
+    reprendreBtn.style.cssText = 'display:none;align-items:center;justify-content:center;gap:10px;background:#f0fae0;color:#1B6FE8;border:1.5px solid #1B6FE8;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box;min-height:48px';
+    reprendreBtn.innerHTML = '&#128260; Reprendre la photo';
+    reprendreBtn.onclick = function(){ session._lastPhoto = null; camPreparer(); };
+    btns.appendChild(reprendreBtn);
+
+    // Secours : import d'une photo depuis l'appareil
+    var importLabel = document.createElement('label');
+    importLabel.id = 'etiq-btn-import';
+    importLabel.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;background:#f0fae0;color:#555;border:1.5px solid #dde8c8;border-radius:14px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box;min-height:48px';
+    var importSpan = document.createElement('span'); importSpan.textContent = '📁';
+    var importTxt = document.createTextNode(' Importer une photo');
+    var importInp = document.createElement('input'); importInp.type='file'; importInp.accept='image/*'; importInp.style.display='none';
+    importLabel.appendChild(importSpan); importLabel.appendChild(importTxt); importLabel.appendChild(importInp);
+    btns.appendChild(importLabel);
 
     // Bouton Fin de scan
     var finBtn = document.createElement('button');
     finBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;background:#22c55e;color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;width:100%;box-sizing:border-box';
     finBtn.innerHTML = '✓ Fin de scan des étiquettes →';
-    finBtn.onclick = function(){ renderBLScan(); };
+    finBtn.onclick = function(){ camArreter(); renderBLScan(); };
     btns.appendChild(finBtn);
 
     ov.appendChild(btns);
 
-    // Handler SHOOT après insertion
-    shootInp.addEventListener('change', function(){
+    // Import d'une photo : meme traitement que la capture camera
+    importInp.addEventListener('change', function(){
       if(!this.files||!this.files[0]) return;
       var file = this.files[0];
       var reader = new FileReader();
-      reader.onload = function(e){
-        session._lastPhoto = e.target.result;
-        // Afficher preview
-        var pz = document.getElementById('etiq-preview-zone');
-        if(pz) pz.innerHTML = '<img src="'+e.target.result+'" style="width:100%;height:100%;object-fit:cover">';
-        // Lancer analyse IA
-        var iz = document.getElementById('etiq-ia-zone');
-        if(iz) iz.innerHTML = '<div style="text-align:center;padding:14px;font-size:13px;color:#1B6FE8;font-weight:700">⚡ Analyse en cours...</div>';
-        var b64 = e.target.result.split(',')[1];
-        var mime = file.type||'image/jpeg';
-        var hdrs=(function(){var h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};var k=(parametresData&&parametresData.anthropicApiKey)||"";if(k)h["x-api-key"]=k;return h;})();
-          geminiCall("Etiquette alimentaire. JSON pur sans markdown: {nom, lot, dlc, poids_kg, fournisseur}. Absent = null.", b64, mime)
-                .then(function(data){
-          var txt = data.content&&data.content[0]?data.content[0].text:'';
-          txt = txt.replace(/```json|```/g,'').trim();
-          var info;
-          try{ info = JSON.parse(txt); } catch(ex){ info = {nom:'Produit inconnu',lot:null,dlc_format_jj_mm_aaaa:null,poids_kg:null}; }
-          // Normaliser la DLC
-          var dlc = info.dlc_format_jj_mm_aaaa||null;
-          if(dlc&&dlc.match(/\d{2}\/\d{2}\/\d{4}/)){
-            var p=dlc.split('/'); dlc=p[2]+'-'+p[1]+'-'+p[0];
-          }
-          var etiq = {nom:info.nom||'Produit scanné', lot:info.lot||null, dlc:dlc, poids:info.poids_kg||null, fourn:info.fournisseur||fourn};
-          session.etiquettes.push(etiq);
-          session._lastPhoto = null;
-          renderScanEtiquettes();
-        })
-        .catch(function(){
-          var iz2 = document.getElementById('etiq-ia-zone');
-          if(iz2) iz2.innerHTML = '<div style="background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700">❌ Erreur — Vérifiez votre clé API dans Paramètres</div>';
-        });
-      };
+      reader.onload = function(e){ camArreter(); analyserPhoto(e.target.result, file.type||'image/jpeg'); };
       reader.readAsDataURL(file);
     });
+
+    camPreparer();
+  }
+
+  // ── Analyse IA d'une etiquette (inchangee) ──────────────────
+  // Recoit une image en dataURL, quelle que soit sa provenance :
+  // capture camera ou import de fichier.
+  function analyserPhoto(dataUrl, mime){
+    session._lastPhoto = dataUrl;
+    var pz = document.getElementById('etiq-preview-zone');
+    if(pz) pz.innerHTML = '<img src="'+dataUrl+'" style="width:100%;height:100%;object-fit:cover">';
+    var pb = document.getElementById('etiq-btn-photo');       if(pb) pb.style.display = 'none';
+    var rb = document.getElementById('etiq-btn-reprendre');   if(rb) rb.style.display = 'flex';
+    var iz = document.getElementById('etiq-ia-zone');
+    if(iz) iz.innerHTML = '<div style="text-align:center;padding:14px;font-size:13px;color:#1B6FE8;font-weight:700">⚡ Analyse en cours...</div>';
+    var b64 = String(dataUrl).split(',')[1];
+    geminiCall("Etiquette alimentaire. JSON pur sans markdown: {nom, lot, dlc, poids_kg, fournisseur}. Absent = null.", b64, mime||'image/jpeg')
+      .then(function(data){
+        var txt = data.content&&data.content[0]?data.content[0].text:'';
+        txt = txt.replace(/```json|```/g,'').trim();
+        var info;
+        try{ info = JSON.parse(txt); } catch(ex){ info = {nom:'Produit inconnu',lot:null,dlc_format_jj_mm_aaaa:null,poids_kg:null}; }
+        // Normaliser la DLC
+        var dlc = info.dlc_format_jj_mm_aaaa||null;
+        if(dlc&&dlc.match(/\d{2}\/\d{2}\/\d{4}/)){
+          var p=dlc.split('/'); dlc=p[2]+'-'+p[1]+'-'+p[0];
+        }
+        var etiq = {nom:info.nom||'Produit scanné', lot:info.lot||null, dlc:dlc, poids:info.poids_kg||null, fourn:info.fournisseur||fourn};
+        session.etiquettes.push(etiq);
+        session._lastPhoto = null;
+        renderScanEtiquettes();
+      })
+      .catch(function(){
+        var iz2 = document.getElementById('etiq-ia-zone');
+        if(iz2) iz2.innerHTML = '<div style="background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700">❌ Erreur — Vérifiez votre clé API dans Paramètres</div>';
+      });
+  }
+
+  // ── Camera reelle (getUserMedia) ────────────────────────────
+  // L'ancien <input type="file" capture> n'ouvrait aucun apercu et ne
+  // donnait rien sur ordinateur. Le flux est stocke sur la session pour
+  // pouvoir etre coupe a coup sur en quittant l'ecran.
+  function camDisponible(){
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  function camArreter(){
+    try {
+      if(session._camStream){
+        session._camStream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+      }
+    } catch(e){}
+    session._camStream = null;
+  }
+
+  function camMessage(txt){
+    var pz = document.getElementById('etiq-preview-zone');
+    if(pz) pz.innerHTML = "<div style='text-align:center;color:#bbb;padding:0 18px'>"+
+      "<div style='font-size:40px;margin-bottom:8px'>&#128247;</div>"+
+      "<div style='font-size:13px;line-height:1.5'>"+txt+"</div></div>";
+    var pb = document.getElementById('etiq-btn-photo'); if(pb) pb.style.display = 'none';
+  }
+
+  // Prepare la zone d'apercu : photo deja prise, sinon camera, sinon message.
+  function camPreparer(){
+    var pz = document.getElementById('etiq-preview-zone');
+    if(!pz) return;
+    var pb = document.getElementById('etiq-btn-photo');
+    var rb = document.getElementById('etiq-btn-reprendre');
+
+    if(session._lastPhoto){
+      pz.innerHTML = '<img src="'+session._lastPhoto+'" style="width:100%;height:100%;object-fit:cover">';
+      if(pb) pb.style.display = 'none';
+      if(rb) rb.style.display = 'flex';
+      return;
+    }
+    if(rb) rb.style.display = 'none';
+
+    if(!camDisponible()){
+      camMessage('Caméra indisponible — utilisez <b>Importer une photo</b>.');
+      return;
+    }
+
+    camArreter();   // jamais deux flux en parallele
+    pz.innerHTML = '';
+    var video = document.createElement('video');
+    video.id = 'etiq-video';
+    video.autoplay = true; video.muted = true; video.playsInline = true;
+    video.setAttribute('playsinline','');   // iOS : evite le plein ecran force
+    video.style.cssText = 'width:100%;height:100%;object-fit:cover;background:#1a1a1a';
+    pz.appendChild(video);
+    var cadre = document.createElement('div');
+    cadre.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;height:60%;border:2px solid #1B6FE8;border-radius:8px;pointer-events:none';
+    pz.appendChild(cadre);
+
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }, audio: false
+    }).then(function(stream){
+      // L'ecran a pu changer pendant la demande d'autorisation.
+      if(!document.getElementById('etiq-video')){
+        stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+        return;
+      }
+      session._camStream = stream;
+      video.srcObject = stream;
+      var p = video.play(); if(p && p.catch) p.catch(function(){});
+      if(pb) pb.style.display = 'flex';
+    }).catch(function(){
+      camMessage('Caméra indisponible — utilisez <b>Importer une photo</b>.');
+    });
+  }
+
+  // Capture l'image courante du flux et lance l'analyse.
+  function camCapturer(){
+    var video = document.getElementById('etiq-video');
+    if(!video || !video.videoWidth){
+      showToast('La caméra n\'est pas prête','error',2500);
+      return;
+    }
+    var cv = document.createElement('canvas');
+    cv.width  = video.videoWidth;
+    cv.height = video.videoHeight;
+    cv.getContext('2d').drawImage(video, 0, 0, cv.width, cv.height);
+    var dataUrl = cv.toDataURL('image/jpeg', 0.85);
+    camArreter();                       // la camera est libérée des la capture
+    analyserPhoto(dataUrl, 'image/jpeg');
   }
 
   // Exposer la suppression globalement
@@ -6014,6 +6128,7 @@ function recepOpenFicheReception(fourn, dateVal){
 
     auditEnregistrer('recep','Réception validée',fourn+' — '+prods.length+' produit(s)','Réceptions');
     saveAll();
+    camArreter();      // la camera ne doit jamais rester active
     ov.remove();
     renderReceptions();
     showToast('✅ '+prods.length+' produit(s) → Stock mis à jour !','success',3000);
