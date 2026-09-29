@@ -1994,49 +1994,126 @@ function removeFab() {
   if (f) f.remove();
 }
 
-// ── Helper API Anthropic — résistant WiFi + 4G/5G ──
+// ── Appel IA — passe par la fonction securisee « restopro-ai » ──
+// Aucune cle Gemini ne circule cote navigateur : le secret est detenu
+// par le backend Supabase. L'appareil s'authentifie avec la session
+// obtenue lors de son enrolement ; sans session, l'IA est indisponible
+// et il n'existe aucun contournement par une cle locale.
+var IA_URL = SUPABASE_URL + '/functions/v1/restopro-ai';
+var IA_DELAI_MAX = 45000;   // au-dela, la requete est abandonnee
+
+function iaErreur(msg, code){ var e = new Error(msg); e.code = code; return e; }
+
+// Tout texte venant du reseau est neutralise avant d'etre montre :
+// balises retirees, longueur bornee. Les messages d'erreur finissent
+// dans du texte, jamais dans du HTML interprete.
+// ATTENTION : cette fonction est sure pour textContent UNIQUEMENT.
+// Elle laisse passer les guillemets et &, donc elle ne protege PAS
+// une insertion via innerHTML. Ne pas la reutiliser pour cela.
+function iaTexteSur(s){
+  return String(s == null ? '' : s).replace(/[<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,160);
+}
+
+// Messages destines a l'utilisateur. Ils ne contiennent jamais de jeton,
+// de cle ni d'identifiant technique.
+function iaMessageHttp(statut, data){
+  var detail = (data && data.erreur) ? iaTexteSur(data.erreur) : '';
+  if(statut === 401) return 'Session expirée — reliez à nouveau cet appareil (Paramètres → Configuration).';
+  if(statut === 403) return 'Ce compte n\'est pas autorisé sur ce restaurant.';
+  if(statut === 429) return 'Limite d\'utilisation atteinte — réessayez dans quelques minutes.';
+  if(statut === 503) return 'Service IA momentanément indisponible.';
+  return 'Service IA indisponible (code ' + statut + ')' + (detail ? ' — ' + detail : '');
+}
+
 function geminiCall(prompt, imageB64, imageMime){
-  var apiKey = (parametresData&&parametresData.anthropicApiKey)||'';
-  if(!apiKey){
-    var eCle = new Error('Clé API Gemini manquante');
-    eCle.code = 'CLE_MANQUANTE';
-    return Promise.reject(eCle);
+  if(typeof Auth === 'undefined' || !Auth.dispo() || !Auth.client){
+    return Promise.reject(iaErreur(
+      'Serveur non configuré — cet appareil n\'est pas relié au cloud RestoPro.', 'SERVEUR_ABSENT'));
   }
-  var model = 'gemini-1.5-flash';
-  // La cle voyage dans l'URL : c'est l'usage impose par l'API Gemini.
-  // Elle est encodee, et n'est jamais affichee ni journalisee.
-  var url = 'https://generativelanguage.googleapis.com/v1beta/models/'+model+
-            ':generateContent?key='+encodeURIComponent(apiKey);
-  var parts = [];
-  if(imageB64) parts.push({inline_data:{mime_type:imageMime||'image/jpeg',data:imageB64}});
-  parts.push({text: prompt});
-  return fetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({contents:[{parts:parts}],generationConfig:{maxOutputTokens:1500}})
-  }).then(function(rep){
-    // fetch() resout avec une Response, pas avec le JSON : sans cette
-    // lecture, data.candidates etait toujours undefined et la fonction
-    // renvoyait un texte vide meme quand Gemini avait repondu.
-    return rep.text().then(function(brut){
-      var data = {};
-      try { data = JSON.parse(brut||'{}'); } catch(e){ data = {}; }
-      if(!rep.ok){
-        // Le vrai motif renvoye par Google, au lieu d'un message generique.
-        throw new Error((data.error&&data.error.message) || ('HTTP '+rep.status));
-      }
-      if(data.error) throw new Error(data.error.message||'Erreur Gemini');
-      var cand = data.candidates && data.candidates[0];
-      var text = cand&&cand.content&&cand.content.parts&&cand.content.parts[0]
-                 ? cand.content.parts[0].text : '';
-      if(!text){
-        var motif = (cand&&cand.finishReason) ||
-                    (data.promptFeedback&&data.promptFeedback.blockReason) || '';
-        throw new Error('Réponse vide'+(motif?' ('+motif+')':''));
-      }
-      // Format compatible avec l'ancien code Anthropic
-      return {content:[{text:text}]};
+  // Sans garde-temps, une 4G qui decroche laisse la promesse en suspens
+  // et l'ecran bloque sur « Analyse en cours… » jusqu'au rechargement.
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var minuteur = null;
+  function stopMinuteur(){ if(minuteur){ clearTimeout(minuteur); minuteur = null; } }
+
+  return Auth.client.auth.getSession().then(function(r){
+    // Une session illisible n'est pas une absence d'enrolement : le
+    // distinguer evite d'envoyer reconfigurer un appareil deja relie.
+    if(r && r.error){
+      throw iaErreur('Session illisible — reliez à nouveau cet appareil.', 'SESSION_ILLISIBLE');
+    }
+    var sess  = r && r.data && r.data.session;
+    var jeton = sess && sess.access_token;
+    if(!jeton){
+      throw iaErreur(
+        'Appareil non enrôlé — reliez cet appareil pour utiliser l\'IA.', 'NON_ENROLE');
+    }
+    var infos = (typeof Auth.appareilInfos === 'function') ? Auth.appareilInfos() : null;
+    // Le restaurant vient de l'enrolement de l'appareil : jamais saisi.
+    // Il est exige, pour que le backend puisse toujours recouper
+    // l'appartenance ; sans lui, l'appel n'est pas tente.
+    if(!infos || !infos.restaurantId){
+      throw iaErreur(
+        'Appareil non enrôlé — aucun restaurant associé à cet appareil.', 'NON_ENROLE');
+    }
+    var corps = { prompt: String(prompt || ''), restaurant_id: infos.restaurantId };
+    if(imageB64){
+      corps.image_b64  = imageB64;
+      corps.image_mime = imageMime || 'image/jpeg';
+    }
+    var opts = {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer ' + jeton,
+        'apikey': SUPABASE_ANON
+      },
+      body: JSON.stringify(corps)
+    };
+    if(ctrl) opts.signal = ctrl.signal;
+    // fetch() resout avec une Response, pas avec le JSON : la lecture du
+    // corps est indispensable, sinon la reponse parait toujours vide.
+    // Elle est incluse dans la course au minuteur, car une coupure
+    // PENDANT le corps laisserait sinon la promesse en suspens.
+    var requete = fetch(IA_URL, opts).then(function(rep){
+      return rep.text().then(function(brut){
+        return {ok: rep.ok, statut: rep.status, brut: brut};
+      });
     });
+    // Le minuteur rejette lui-meme : le garde-temps tient donc aussi
+    // sur un navigateur depourvu d'AbortController.
+    var chrono = new Promise(function(_, rejeter){
+      minuteur = setTimeout(function(){
+        try { if(ctrl) ctrl.abort(); } catch(e){}
+        rejeter(iaErreur('Le service IA n\'a pas répondu à temps — réessayez.', 'DELAI'));
+      }, IA_DELAI_MAX);
+    });
+    return Promise.race([requete, chrono]);
+  }, function(){
+    throw iaErreur('Session illisible — reliez à nouveau cet appareil.', 'SESSION_ILLISIBLE');
+  }).then(function(r){
+    stopMinuteur();
+    var data = null;
+    try { data = JSON.parse(r.brut||'{}'); } catch(e){ data = null; }
+    if(!r.ok) throw iaErreur(iaMessageHttp(r.statut, data), 'HTTP_' + r.statut);
+    // Corps non-JSON avec un statut 200 : passerelle intermediaire,
+    // page d'erreur HTML. Le motif exact evite de chercher au mauvais endroit.
+    if(data === null) throw iaErreur('Réponse illisible du service IA', 'ILLISIBLE');
+    if(data.erreur) throw iaErreur(iaTexteSur(data.erreur), 'BACKEND');
+    var texte = data.texte || '';
+    if(!texte) throw iaErreur('Réponse vide du service IA', 'VIDE');
+    // Format de retour inchange : les appelants ne bougent pas.
+    return {content:[{text:texte}]};
+  }).catch(function(e){
+    stopMinuteur();
+    // Nos propres erreurs portent un code TEXTUEL. Le test doit etre
+    // « typeof === string » : un AbortError natif porte lui aussi un
+    // « code », mais numerique (20), et serait relaye tel quel, en
+    // anglais, au lieu du message de delai.
+    if(e && typeof e.code === 'string') throw e;
+    if(e && e.name === 'AbortError')
+      throw iaErreur('Le service IA n\'a pas répondu à temps — réessayez.', 'DELAI');
+    throw iaErreur('Connexion au service IA impossible — vérifiez le réseau.', 'RESEAU');
   });
 }
 
@@ -4839,8 +4916,19 @@ function scanInventairePhoto(input){
       }
       scanInventaireAfficher(info);
     })
-    .catch(function(){
-      if(resultDiv) resultDiv.innerHTML='<div style="background:#ffebee;border-radius:12px;padding:14px;text-align:center;color:#e53935">Erreur de connexion.</div>';
+    .catch(function(err){
+      // Le scanner d'inventaire passe par le meme service securise :
+      // il affiche donc le meme motif precis qu'ailleurs. Le message
+      // vient du reseau : il est pose en texte, jamais en HTML.
+      var msg=String((err&&err.message)||'Erreur de connexion.');
+      try { console.warn('Scan inventaire :', msg); } catch(e){}
+      if(resultDiv){
+        resultDiv.innerHTML='';
+        var boite=document.createElement('div');
+        boite.style.cssText='background:#ffebee;border-radius:12px;padding:14px;text-align:center;color:#e53935;font-size:13px;font-weight:700';
+        boite.textContent=msg;
+        resultDiv.appendChild(boite);
+      }
     });
   };
   reader.readAsDataURL(file);
@@ -5902,15 +5990,26 @@ function recepOpenFicheReception(fourn, dateVal){
         renderScanEtiquettes();
       })
       .catch(function(err){
-        // Message differencie : « clé API » n'etait pas toujours la cause.
-        // Le detail technique va dans la console ; la cle n'y figure jamais.
+        // Les messages viennent de geminiCall : session expirée, restaurant
+        // non autorisé, limite atteinte, service indisponible. Aucun jeton
+        // ni secret n'y figure, ni a l'ecran ni dans la console.
         var msg = String((err&&err.message)||'erreur inconnue');
-        var aff = (err&&err.code==='CLE_MANQUANTE')
-          ? 'Aucune clé API configurée — Paramètres → Clé API (AIza…)'
-          : 'Analyse impossible — ' + msg;
+        // Ces messages se suffisent a eux-memes : les prefixer de
+        // « Analyse impossible — » donnerait une phrase a deux tetes.
+        var prefixe = (err && (err.code==='NON_ENROLE' || err.code==='SERVEUR_ABSENT'
+                       || err.code==='SESSION_ILLISIBLE' || err.code==='DELAI'
+                       || err.code==='HTTP_401' || err.code==='HTTP_403'));
+        var aff = prefixe ? msg : ('Analyse impossible — ' + msg);
         try { console.warn('Analyse étiquette :', msg); } catch(e){}
         var iz2 = document.getElementById('etiq-ia-zone');
-        if(iz2) iz2.innerHTML = '<div style="background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700">❌ '+aff+'</div>';
+        if(iz2){
+          // Le message vient du reseau : il est pose en texte, pas en HTML.
+          iz2.innerHTML = '';
+          var bt = document.createElement('div');
+          bt.style.cssText = 'background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700';
+          bt.textContent = '❌ ' + aff;
+          iz2.appendChild(bt);
+        }
       });
   }
 
@@ -11767,79 +11866,50 @@ function renderParametres(){
     wrap.appendChild(pwaBtn);
 
   } else if(paramsTab==='api'){
-    // Clé API Gemini (Google)
+    // Assistant IA — plus aucune cle a saisir sur l'appareil.
+    // Le secret Gemini reste cote serveur ; l'appareil s'authentifie
+    // avec la session obtenue lors de son enrolement.
     var apiCard=document.createElement('div');
     apiCard.style.cssText='background:#e8f0ff;border-left:4px solid #1B6FE8;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1B6FE8;line-height:1.6';
-    apiCard.innerHTML='<strong>🤖 Clé API Gemini (Google)</strong><br>Nécessaire pour l\'Assistant IA, le Scanner de recettes et l\'analyse photo DLC.<br>'+
-      '<a href="https://aistudio.google.com/" target="_blank" style="color:#1B6FE8;font-weight:700">Obtenir une clé sur aistudio.google.com →</a>';
+    apiCard.innerHTML='<strong>🤖 Analyse IA sécurisée</strong><br>L\'analyse photo des étiquettes (réceptions) et le scanner d\'inventaire passent par le service sécurisé RestoPro.<br><strong>Aucune clé n\'est à saisir sur cet appareil.</strong>';
     wrap.appendChild(apiCard);
 
-    var apiDiv=document.createElement('div');apiDiv.className='ff';
-    var apiLbl=document.createElement('label');apiLbl.textContent='Clé API (AIza......)';apiDiv.appendChild(apiLbl);
-    var apiInp=document.createElement('input');
-    apiInp.type='password';
-    apiInp.id='param-api-key';
-    apiInp.value=parametresData.anthropicApiKey||'';
-    apiInp.placeholder='AIza...api03-...';
-    apiInp.style.cssText='width:100%;padding:11px 14px;border:1.5px solid #dde8c8;border-radius:12px;font-size:14px;font-family:monospace;background:#fff;box-sizing:border-box';
-    apiDiv.appendChild(apiInp);
-    wrap.appendChild(apiDiv);
-
-    // Toggle visibilité
-    var showBtn=document.createElement('button');
-    showBtn.style.cssText='background:#f0fae0;color:#1B6FE8;border:1.5px solid #1B6FE8;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:14px;margin-top:-4px';
-    showBtn.textContent='👁️ Afficher / Masquer';
-    showBtn.onclick=function(){var i=document.getElementById('param-api-key');i.type=i.type==='password'?'text':'password';};
-    wrap.appendChild(showBtn);
-
-    // Statut actuel
+    // Statut : l'IA depend de l'enrolement de l'appareil, plus d'une cle.
+    var infosIA=(typeof Auth!=='undefined'&&typeof Auth.appareilInfos==='function')?Auth.appareilInfos():null;
+    var iaPret=!!(typeof Auth!=='undefined'&&Auth.dispo()&&infosIA&&infosIA.restaurantId);
     var statutDiv=document.createElement('div');
-    // Le projet est passe a Gemini : une cle commence par « AIza »,
-    // plus par « sk- » (ancien format Anthropic). Le statut restait donc
-    // rouge meme avec une cle correcte.
-    var hasKey=!!(parametresData.anthropicApiKey&&parametresData.anthropicApiKey.startsWith('AIza'));
-    statutDiv.style.cssText='background:'+(hasKey?'#e8f5e9':'#ffebee')+';border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;font-weight:700;color:'+(hasKey?'#16a34a':'#e53935');
-    statutDiv.textContent=hasKey?'✅ Clé Gemini configurée — IA fonctionnelle':'❌ Aucune clé — IA non disponible';
+    statutDiv.style.cssText='background:'+(iaPret?'#e8f5e9':'#ffebee')+';border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;font-weight:700;color:'+(iaPret?'#16a34a':'#e53935');
+    statutDiv.textContent=iaPret
+      ? '✅ Appareil relié — analyse IA disponible'
+      : '❌ Appareil non relié — analyse IA indisponible';
     wrap.appendChild(statutDiv);
 
-    var saveBtn=document.createElement('button');
-    saveBtn.style.cssText='width:100%;background:#1B6FE8;color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box';
-    saveBtn.textContent='💾 Sauvegarder la clé';
-    saveBtn.onclick=function(){
-      var key=document.getElementById('param-api-key').value.trim();
-      // La condition precedente etait « key && !startsWith('AIza') || key.length > 20 ».
-      // « && » liant plus fort que « || », elle se lisait
-      // « (…) OU (longueur > 20) » : une vraie cle Gemini faisant 39
-      // caracteres, TOUTE cle valide etait refusee a l'enregistrement.
-      if(key && !key.startsWith('AIza')){showToast('Clé invalide — doit commencer par AIza...','error');return;}
-      parametresData.anthropicApiKey=key;
-      saveAll();
-      showToast(key?'✅ Clé API sauvegardée !':'Clé supprimée','success');
-      renderParametres();
-    };
-    wrap.appendChild(saveBtn);
+    if(!iaPret){
+      var aideDiv=document.createElement('div');
+      aideDiv.style.cssText='background:#f0fae0;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#555;line-height:1.6';
+      aideDiv.innerHTML='Reliez cet appareil à votre restaurant depuis <strong>Configuration</strong>, plus bas sur cette page, pour activer l\'IA.';
+      wrap.appendChild(aideDiv);
+    }
 
-    // Test de connexion
+    // Test de connexion : passe par le service securise, sans aucune cle.
     var testBtn=document.createElement('button');
-    testBtn.style.cssText='width:100%;background:#f0fae0;color:#1B6FE8;border:1.5px solid #1B6FE8;border-radius:14px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;box-sizing:border-box';
-    testBtn.textContent='🔌 Tester la connexion IA';
+    testBtn.style.cssText='width:100%;background:#f0fae0;color:#1B6FE8;border:1.5px solid #1B6FE8;border-radius:14px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;box-sizing:border-box';
+    testBtn.textContent='🔌 Tester l\'analyse IA';
     testBtn.onclick=function(){
-      var key=document.getElementById('param-api-key').value.trim()||parametresData.anthropicApiKey||'';
-      if(!key){showToast('Entrez une clé API d\'abord','error');return;}
       testBtn.textContent='⏳ Test en cours...';testBtn.disabled=true;
       geminiCall("Réponds juste OK")
       .then(function(d){
         testBtn.disabled=false;
         if(d&&d.content&&d.content[0]){
-          testBtn.textContent='✅ Connexion Gemini OK !';
+          testBtn.textContent='✅ Analyse IA opérationnelle';
           testBtn.style.background='#e8f5e9';testBtn.style.color='#16a34a';testBtn.style.borderColor='#16a34a';
         } else {
-          testBtn.textContent='❌ Clé invalide';
+          testBtn.textContent='❌ Réponse inattendue du service';
           testBtn.style.color='#e53935';
         }
       }).catch(function(err){
         testBtn.disabled=false;
-        testBtn.textContent='❌ Erreur: '+(err&&err.message||'Connexion impossible');
+        testBtn.textContent='❌ '+((err&&err.message)||'Connexion impossible');
         testBtn.style.color='#e53935';
       });
     };
