@@ -5953,6 +5953,11 @@ function recepOpenFicheReception(fourn, dateVal){
     importInp.addEventListener('change', function(){
       if(!this.files||!this.files[0]) return;
       var file = this.files[0];
+      // Vider la valeur APRES avoir capte le fichier : sans cela, re-selectionner
+      // le MEME fichier apres une erreur n'emet aucun evenement « change » et
+      // l'ecran parait bloque. L'ordre est impose : affecter la chaine vide a
+      // « value » vide aussi « files », donc le faire avant casserait l'import.
+      this.value = '';
       var reader = new FileReader();
       reader.onload = function(e){ camArreter(); analyserPhoto(e.target.result, file.type||'image/jpeg'); };
       reader.readAsDataURL(file);
@@ -5966,6 +5971,10 @@ function recepOpenFicheReception(fourn, dateVal){
   // capture camera ou import de fichier.
   function analyserPhoto(dataUrl, mime){
     session._lastPhoto = dataUrl;
+    // Zone d'apercu DE CETTE CAPTURE. Sert de temoin au chemin d'echec : si
+    // l'ecran a ete re-rendu entre-temps (retour, autre reception, fin de scan),
+    // l'element aura change d'identite et il ne faudra pas rearmer la camera.
+    var pzCapture = document.getElementById('etiq-preview-zone');
     var pz = document.getElementById('etiq-preview-zone');
     if(pz) pz.innerHTML = '<img src="'+dataUrl+'" style="width:100%;height:100%;object-fit:cover">';
     var pb = document.getElementById('etiq-btn-photo');       if(pb) pb.style.display = 'none';
@@ -6009,6 +6018,17 @@ function recepOpenFicheReception(fourn, dateVal){
           bt.style.cssText = 'background:#ffebee;border-radius:10px;padding:12px;margin:8px 0;text-align:center;color:#e53935;font-size:13px;font-weight:700';
           bt.textContent = '❌ ' + aff;
           iz2.appendChild(bt);
+        }
+        // Le chemin d'echec laissait la camera coupee et le bouton de capture
+        // masque : l'ecran paraissait bloque alors que la session etait intacte.
+        // La purge est INCONDITIONNELLE : sinon, revenir plus tard sur l'ecran de
+        // scan y retrouverait la photo figee et la camera morte.
+        session._lastPhoto = null;
+        // La camera n'est rearmee que si l'ecran est TOUJOURS celui de cette
+        // capture. Comparaison d'IDENTITE : l'identifiant seul ne distinguerait
+        // pas une zone recreee par un re-rendu entre-temps.
+        if(document.getElementById('etiq-preview-zone') === pzCapture){
+          camPreparer();
         }
       });
   }
