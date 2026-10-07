@@ -5671,8 +5671,16 @@ function scanOpenUnitaire(){
         // → Stock directement
         var nom = result.nom||'Produit scanné';
         var poids = parseFloat(result.poids_kg)||1;
-        var dlc = result.dlc_jj_mm_aaaa||null;
-        if(dlc&&dlc.match(/\d{2}\/\d{2}\/\d{4}/)){var p=dlc.split('/');dlc=p[2]+'-'+p[1]+'-'+p[0];}
+        // Le formulaire (plus haut) remplit la clef « dlc ». L'ancienne lecture
+        // portait sur « dlc_jj_mm_aaaa », produite nulle part : la DLC SAISIE
+        // AU CLAVIER etait jetee en silence. Conversion ISO supprimee pour la
+        // meme raison qu'en reception, et meme garde de FORME.
+        // L'annee sur DEUX chiffres est acceptee : le champ de saisie plus haut
+        // porte le gabarit « 31/12/26 », l'ecran voisin est intitule
+        // « DLC (jj/mm/aa) », et les lecteurs savent deja la convertir
+        // (dlcStatus : parseInt(p[2])<100 => 2000+). La rejeter reintroduirait
+        // ici, sur le chemin humain, le rejet silencieux que ce pan corrige.
+        var dlc = (typeof result.dlc === 'string' && /^\d{2}\/\d{2}\/(\d{2}|\d{4})$/.test(result.dlc)) ? result.dlc : null;
         var existing = stockItems.find(function(s){return s.nom.toLowerCase()===nom.toLowerCase();});
         if(existing){ existing.qte=Math.round((existing.qte+poids)*100)/100; if(dlc)existing.dlc=dlc; if(result.lot)existing.lot=result.lot; existing.scans=(existing.scans||0)+1; }
         else stockItems.unshift(restoStamp({id:Date.now(),nom:nom,cat:'Alimentaire',qte:poids,unite:'kg',min:0,fourn:result.fournisseur||'',dlc:dlc||'',lot:result.lot||'',scans:1}));
@@ -5982,17 +5990,46 @@ function recepOpenFicheReception(fourn, dateVal){
     var iz = document.getElementById('etiq-ia-zone');
     if(iz) iz.innerHTML = '<div style="text-align:center;padding:14px;font-size:13px;color:#1B6FE8;font-weight:700">⚡ Analyse en cours...</div>';
     var b64 = String(dataUrl).split(',')[1];
-    geminiCall("Etiquette alimentaire. JSON pur sans markdown: {nom, lot, dlc, poids_kg, fournisseur}. Absent = null.", b64, mime||'image/jpeg')
+    // « DLC au format jj/mm/aaaa » : sans cette consigne, le modele est libre
+    // de repondre en ISO (aaaa-mm-jj), format que six des sept lecteurs de
+    // stockItems.dlc ignorent — la DLC serait alors stockee mais muette sur
+    // tous les ecrans d'alerte, et le rapport HACCP afficherait « OK J+NaN ».
+    // Le prompt de l'inventaire (scanInventairePhoto) impose deja ce format.
+    geminiCall("Etiquette alimentaire. JSON pur sans markdown: {nom, lot, dlc, poids_kg, fournisseur}. DLC au format jj/mm/aaaa. Absent = null.", b64, mime||'image/jpeg')
       .then(function(data){
         var txt = data.content&&data.content[0]?data.content[0].text:'';
         txt = txt.replace(/```json|```/g,'').trim();
         var info;
-        try{ info = JSON.parse(txt); } catch(ex){ info = {nom:'Produit inconnu',lot:null,dlc_format_jj_mm_aaaa:null,poids_kg:null}; }
-        // Normaliser la DLC
-        var dlc = info.dlc_format_jj_mm_aaaa||null;
-        if(dlc&&dlc.match(/\d{2}\/\d{2}\/\d{4}/)){
-          var p=dlc.split('/'); dlc=p[2]+'-'+p[1]+'-'+p[0];
-        }
+        try{ info = JSON.parse(txt); } catch(ex){ info = {nom:'Produit inconnu',lot:null,dlc:null,poids_kg:null}; }
+        // La DLC est conservee TELLE QUELLE, en jj/mm/aaaa. Sept lecteurs
+        // consomment stockItems.dlc : toDate et la ligne du rapport PDF, le
+        // compteur de depassements, alertesDLC du KPI stock, le badge de la
+        // liste de stock, stockCtrlDlcBadge, et parseDlc du tableau de bord.
+        // Six font « split('/') » puis jour=p[0], mois=p[1], annee=p[2] ;
+        // seul parseDlc accepte aussi l'ISO. Les noms sont donnes plutot que
+        // des numeros de ligne, qui se decalent a chaque modification.
+        // L'ancienne lecture portait sur « dlc_format_jj_mm_aaaa », que le
+        // prompt (ci-dessus) ne demande pas et que le modele ne renvoie pas :
+        // la DLC etait TOUJOURS nulle sur ce chemin.
+        // La conversion vers « aaaa-mm-jj » est supprimee et non reparee :
+        // une date ISO ne contient aucun « / », donc six de ces sept lecteurs
+        // l'ignorent. La reparer aurait rendu le defaut invisible.
+        // Garde de FORME, pas seulement de type. Deux raisons :
+        // 1) AUCUN des sept lecteurs ne verifie le type avant « .split('/') » :
+        //    une valeur non-chaine y leverait un TypeError, et l'ecran Stock
+        //    comme le rapport PDF deviendraient inutilisables ;
+        // 2) une chaine d'une autre forme — « 2026-10-13 » notamment — serait
+        //    stockee et affichee, mais muette : aucun badge, aucun comptage au
+        //    KPI, et « OK J+NaN » au rapport DDPP, y compris sur un produit
+        //    perime. Un champ rempli mais inerte est plus trompeur qu'un champ
+        //    vide. Toute valeur non conforme devient donc null.
+        // L'annee sur deux chiffres est acceptee, comme au site B : les sept
+        // lecteurs la convertissent deja (parseInt(p[2])<100 => 2000+), et
+        // c'est le gabarit affiche par plusieurs ecrans de l'application.
+        // Les ancres ^ et $ sont indispensables : sans ^, « DLC: 13/10/2026 »
+        // passerait, parseInt("DLC: 13") vaudrait NaN, et le rapport DDPP
+        // imprimerait « OK J+NaN » sur un produit peut-etre perime.
+        var dlc = (typeof info.dlc === 'string' && /^\d{2}\/\d{2}\/(\d{2}|\d{4})$/.test(info.dlc)) ? info.dlc : null;
         var etiq = {nom:info.nom||'Produit scanné', lot:info.lot||null, dlc:dlc, poids:info.poids_kg||null, fourn:info.fournisseur||fourn};
         session.etiquettes.push(etiq);
         session._lastPhoto = null;
