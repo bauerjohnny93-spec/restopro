@@ -878,6 +878,15 @@ var Storage = {
 
 var LS_KEY = 'restopro_v2';
 
+// BARRIERE DE STOCKAGE — copie de test uniquement.
+// Lecture autorisée pour pouvoir ouvrir l'état existant, mais aucune écriture,
+// suppression ni remise à zéro du stockage local de RestoPro n'est autorisée.
+Storage.setRaw = function(){ return false; };
+Storage.set = function(){ return false; };
+Storage.remove = function(){ return false; };
+Storage.clear = function(){ return false; };
+
+
 
 
 
