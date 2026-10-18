@@ -572,7 +572,8 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
 /* Status bar safe area */
 .safe-top { padding-top: env(safe-area-inset-top, 0px); }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+var RESTOPRO_MODE_TEST_ISOLE = true; // verrou global fixe pour cette copie de test</script>
 </head>
 <body>
 
@@ -919,6 +920,10 @@ function saveAllFlush(){
 // Ecriture reelle. N'est plus appelee directement : saveAll() la
 // declenche apres regroupement, saveAllNow() la force immediatement.
 function saveAllReel() {
+  if (RESTOPRO_MODE_TEST_ISOLE) {
+    // Cette copie de test ne doit jamais persister les donnees de l'application.
+    return;
+  }
   var data = {
     usersData: usersData,
     tafTasks: restoFull('tafTasks').map(function(t){ return {id:t.id,nom:t.nom,cat:t.cat,creneau:t.creneau,equipe:t.equipe,prio:t.prio,done:t.done,elapsed:t.elapsed,date:t.date}; }),
@@ -6335,7 +6340,6 @@ function recepOpenFicheReception(fourn, dateVal){
     ov.appendChild(btns);
   }
 
-  var RESTOPRO_MODE_TEST_ISOLE = true; // verrou fixe : aucun enregistrement réel depuis cette copie
   function validerSession(avecBL){
     var temp = recepNombre(document.getElementById('recep-temp')?document.getElementById('recep-temp').value:'');
     var conforme = document.getElementById('recep-conforme')?document.getElementById('recep-conforme').value:'conforme';
