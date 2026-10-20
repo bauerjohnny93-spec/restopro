@@ -6029,6 +6029,37 @@ function recepOpenFicheReception(fourn, dateVal){
   // ── Analyse IA d'une etiquette (inchangee) ──────────────────
   // Recoit une image en dataURL, quelle que soit sa provenance :
   // capture camera ou import de fichier.
+  // Réduit les photos avant envoi à l'IA pour éviter d'uploader des images
+  // de plusieurs mégaoctets. L'aperçu conserve toujours la photo originale.
+  function preparerImagePourIA(dataUrl){
+    return new Promise(function(resolve){
+      try {
+        var img = new Image();
+        img.onload = function(){
+          try {
+            var maxCote = 1800;
+            var largeurSource = img.naturalWidth || img.width;
+            var hauteurSource = img.naturalHeight || img.height;
+            if(!largeurSource || !hauteurSource){ resolve(dataUrl); return; }
+            var ratio = Math.min(1, maxCote / Math.max(largeurSource, hauteurSource));
+            var largeur = Math.max(1, Math.round(largeurSource * ratio));
+            var hauteur = Math.max(1, Math.round(hauteurSource * ratio));
+            var canvas = document.createElement('canvas');
+            canvas.width = largeur;
+            canvas.height = hauteur;
+            var ctx = canvas.getContext('2d');
+            if(!ctx){ resolve(dataUrl); return; }
+            ctx.drawImage(img, 0, 0, largeur, hauteur);
+            // JPEG qualité 0,82 : compromis poids/lisibilité pour les étiquettes.
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+          } catch(e) { resolve(dataUrl); }
+        };
+        img.onerror = function(){ resolve(dataUrl); };
+        img.src = dataUrl;
+      } catch(e) { resolve(dataUrl); }
+    });
+  }
+
   function analyserPhoto(dataUrl, mime){
     session._lastPhoto = dataUrl;
     // Zone d'apercu DE CETTE CAPTURE. Sert de temoin au chemin d'echec : si
@@ -6041,14 +6072,12 @@ function recepOpenFicheReception(fourn, dateVal){
     var rb = document.getElementById('etiq-btn-reprendre');   if(rb) rb.style.display = 'flex';
     var iz = document.getElementById('etiq-ia-zone');
     if(iz) iz.innerHTML = '<div style="text-align:center;padding:14px;font-size:13px;color:#1B6FE8;font-weight:700">⚡ Analyse en cours...</div>';
-    var b64 = String(dataUrl).split(',')[1];
-    // « DLC au format jj/mm/aaaa » : sans cette consigne, le modele est libre
-    // de repondre en ISO (aaaa-mm-jj), format que six des sept lecteurs de
-    // stockItems.dlc ignorent — la DLC serait alors stockee mais muette sur
-    // tous les ecrans d'alerte, et le rapport HACCP afficherait « OK J+NaN ».
-    // Le prompt de l'inventaire (scanInventairePhoto) impose deja ce format.
-    geminiCall("Étiquette alimentaire. Transcris uniquement ce qui est lisible. JSON pur sans markdown : {nom, lot, type_date, date, poids_kg, fournisseur}. type_date vaut exactement DLC, DDM ou INCONNUE. Classe DLC uniquement si l’étiquette indique clairement « DLC » ou « à consommer jusqu’au » ; classe DDM uniquement si elle indique clairement « DDM » ou « à consommer de préférence avant ». Ne confonds jamais une heure, un numéro de lot, un code, une date de fabrication ou une date d’emballage avec une date de consommation. Si les chiffres d’une date sont lisibles mais son type ne l’est pas, conserve la date dans date et mets type_date à INCONNUE. Si les chiffres sont illisibles ou ambigus, date=null. Ne devine et ne complète jamais les chiffres ou l’année. Les dates lisibles sont au format jj/mm/aaaa. Champs absents ou illisibles=null.", b64, mime||'image/jpeg')
-      .then(function(data){
+    // L'image envoyée est réduite côté navigateur. Cela réduit le transfert ;
+    // la durée du calcul IA dépend aussi du modèle et du service backend.
+    preparerImagePourIA(dataUrl).then(function(dataUrlIA){
+      var b64 = String(dataUrlIA).split(',')[1];
+      return geminiCall("Étiquette alimentaire. Transcris uniquement ce qui est lisible. JSON pur sans markdown : {nom, lot, type_date, confiance_type_date, preuve_type_date, date, poids_kg, fournisseur}. type_date vaut DLC, DDM ou INCONNUE. Utilise d’abord les mentions visibles près de la date : DLC ou « à consommer jusqu’au » signifie DLC ; DDM ou « à consommer de préférence avant » signifie DDM. Si les mentions explicites sont absentes, classe automatiquement uniquement si le contexte visible de l’étiquette donne une confiance élevée (confiance_type_date entre 0 et 1, au moins 0.85) et indique la preuve dans preuve_type_date. Ne classe jamais selon le seul nom ou la catégorie du produit. Ne confonds jamais une heure, un numéro de lot, un code, une date de fabrication ou une date d’emballage avec une date de consommation. Si le type reste incertain, conserve la date dans date et mets type_date à INCONNUE. Si les chiffres d’une date sont illisibles ou ambigus, date=null. Ne devine et ne complète jamais les chiffres ou l’année. Les dates lisibles sont au format jj/mm/aaaa. Champs absents ou illisibles=null.", b64, 'image/jpeg');
+    }).then(function(data){
         var txt = data.content&&data.content[0]?data.content[0].text:'';
         txt = txt.replace(/```json|```/g,'').trim();
         var info;
@@ -6261,6 +6290,9 @@ function recepOpenFicheReception(fourn, dateVal){
           if(d) d.textContent=etiqDateLibelle(e);
           if(et){var inc=etiqDateAConfirmer(e), exp=etiqDlcDepassee(e);et.textContent=inc?'⚠':(exp?'!':'✓');et.style.color=inc?'#d97706':(exp?'#dc2626':'#22c55e');}
           actualiserAlerteDates();
+          // Une fois le type confirmé, masquer immédiatement le sélecteur :
+          // le récapitulatif et l'état de la date sont déjà mis à jour.
+          if(this.value!=='INCONNUE' && choixType.parentNode) choixType.remove();
         });
       }
     });
