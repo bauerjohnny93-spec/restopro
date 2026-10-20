@@ -572,8 +572,8 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
 /* Status bar safe area */
 .safe-top { padding-top: env(safe-area-inset-top, 0px); }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-var RESTOPRO_MODE_TEST_ISOLE = true; // verrou global fixe pour cette copie de test</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>var RESTOPRO_MODE_TEST_ISOLE = true; // verrou global fixe pour cette copie de test</script>
 </head>
 <body>
 
@@ -6085,6 +6085,9 @@ function recepOpenFicheReception(fourn, dateVal){
         var typeDate = String(info.type_date || '').trim().toUpperCase();
         var dateTranscrite = etiqDateValide(typeof info.date==='string' ? info.date : null);
         if(typeDate!=='DLC' && typeDate!=='DDM') typeDate='INCONNUE';
+        // Une confiance numérique faible force une confirmation manuelle.
+        var confianceTypeDate = Number(info.confiance_type_date);
+        if((typeDate==='DLC' || typeDate==='DDM') && isFinite(confianceTypeDate) && confianceTypeDate < 0.85) typeDate='INCONNUE';
         if(!dateTranscrite) typeDate='INCONNUE';
         var dlc = typeDate==='DLC' ? dateTranscrite : null;
         var ddm = typeDate==='DDM' ? dateTranscrite : null;
