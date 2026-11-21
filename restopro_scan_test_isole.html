@@ -6086,8 +6086,11 @@ function recepOpenFicheReception(fourn, dateVal){
         var dateTranscrite = etiqDateValide(typeof info.date==='string' ? info.date : null);
         if(typeDate!=='DLC' && typeDate!=='DDM') typeDate='INCONNUE';
         // Une confiance numérique faible force une confirmation manuelle.
-        var confianceTypeDate = Number(info.confiance_type_date);
-        if((typeDate==='DLC' || typeDate==='DDM') && isFinite(confianceTypeDate) && confianceTypeDate < 0.85) typeDate='INCONNUE';
+        var confianceBrute = info.confiance_type_date;
+        var confianceTypeDate = (typeof confianceBrute === 'number' || (typeof confianceBrute === 'string' && confianceBrute.trim() !== '')) ? Number(confianceBrute) : NaN;
+        var confianceValide = isFinite(confianceTypeDate) && confianceTypeDate >= 0 && confianceTypeDate <= 1;
+        // Sans score exploitable, le type reste à confirmer : ne jamais accepter une DLC/DDM par défaut.
+        if((typeDate==='DLC' || typeDate==='DDM') && (!confianceValide || confianceTypeDate < 0.85)) typeDate='INCONNUE';
         if(!dateTranscrite) typeDate='INCONNUE';
         var dlc = typeDate==='DLC' ? dateTranscrite : null;
         var ddm = typeDate==='DDM' ? dateTranscrite : null;
