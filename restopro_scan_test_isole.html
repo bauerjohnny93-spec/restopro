@@ -2036,8 +2036,14 @@ function iaTexteSur(s){
 // de cle ni d'identifiant technique.
 function iaMessageHttp(statut, data){
   var cause = data && typeof data.cause === 'string' ? data.cause : '';
-  var statutGoogle = data && Number.isFinite(Number(data.statut_google)) ? Number(data.statut_google) : null;
-  var retryApres = data && Number.isFinite(Number(data.retry_apres_s)) ? Number(data.retry_apres_s) : null;
+  var statutGoogleBrut = data ? data.statut_google : null;
+  var retryApresBrut = data ? data.retry_apres_s : null;
+  var statutGooglePresent = typeof statutGoogleBrut === 'number' || (typeof statutGoogleBrut === 'string' && statutGoogleBrut.trim() !== '');
+  var retryApresPresent = typeof retryApresBrut === 'number' || (typeof retryApresBrut === 'string' && retryApresBrut.trim() !== '');
+  var statutGoogleNombre = statutGooglePresent ? Number(statutGoogleBrut) : NaN;
+  var retryApresNombre = retryApresPresent ? Number(retryApresBrut) : NaN;
+  var statutGoogle = isFinite(statutGoogleNombre) && statutGoogleNombre >= 100 && statutGoogleNombre <= 599 ? statutGoogleNombre : null;
+  var retryApres = isFinite(retryApresNombre) ? retryApresNombre : null;
   var detail = (data && data.erreur) ? iaTexteSur(data.erreur) : '';
 
   // Ces 401/403 concernent la session RestoPro reçue par la fonction.
