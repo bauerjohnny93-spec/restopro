@@ -1289,6 +1289,7 @@ var Auth = {
   // identifie par son PIN seul (voir restopro_membres.sql).
   creerMembership: function(nom, roleApp){
     var self = this;
+    if(RESTOPRO_MODE_TEST_ISOLE) return Promise.resolve({ok:false, msg:'Écriture désactivée dans la copie de test isolée'});
     if(!self.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configure'});
     var infos = self.appareilInfos();
     if(!infos || !infos.restaurantId)
@@ -1311,6 +1312,7 @@ var Auth = {
   // son acces : le serveur le croyait toujours actif et verifier_pin
   // acceptait son PIN. Le meme defaut touchait le nom et le role.
   majMembership: function(membershipId, champs){
+    if(RESTOPRO_MODE_TEST_ISOLE) return Promise.resolve({ok:false, msg:'Écriture désactivée dans la copie de test isolée'});
     if(!this.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configure'});
     return this.client.from('memberships').update(champs).eq('id', membershipId)
       .then(function(r){ return {ok: !r.error, msg: r.error ? r.error.message : null}; })
@@ -1322,6 +1324,7 @@ var Auth = {
   // un employe sans pin_hash, incapable de se connecter et visible
   // dans les listes du restaurant.
   supprimerMembership: function(membershipId){
+    if(RESTOPRO_MODE_TEST_ISOLE) return Promise.resolve({ok:false, msg:'Écriture désactivée dans la copie de test isolée'});
     if(!this.dispo()) return Promise.resolve({ok:false});
     return this.client.from('memberships').delete().eq('id', membershipId)
       .then(function(r){ return {ok: !r.error, msg: r.error ? r.error.message : null}; })
@@ -1330,6 +1333,7 @@ var Auth = {
 
   // Pose ou change le PIN d'un membre (admin / responsable seulement)
   definirPin: function(membershipId, pin){
+    if(RESTOPRO_MODE_TEST_ISOLE) return Promise.resolve({ok:false, msg:'Écriture désactivée dans la copie de test isolée'});
     if(!this.dispo()) return Promise.resolve({ok:false, msg:'Serveur non configuré'});
     return this.client.rpc('definir_pin',
       {p_membership: membershipId, p_pin: String(pin)})
