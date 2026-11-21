@@ -2047,9 +2047,25 @@ function iaMessageHttp(statut, data){
   var detail = (data && data.erreur) ? iaTexteSur(data.erreur) : '';
 
   // Ces 401/403 concernent la session RestoPro reçue par la fonction.
-  // Les erreurs de clé Google doivent être relayées en 502 par le backend.
+  // Les erreurs du fournisseur sont encapsulées par le backend en 502.
   if(statut === 401) return 'Session expirée — reliez à nouveau cet appareil (Paramètres → Configuration).';
   if(statut === 403) return 'Ce compte n\'est pas autorisé sur ce restaurant.';
+
+  // La cause erreur_google regroupe les réponses finales du fournisseur.
+  // Le statut d'origine permet de distinguer quota, modèle absent et configuration.
+  // Ne jamais traiter ces statuts Google comme une erreur de session RestoPro.
+  if(cause === 'erreur_google'){
+    if(statutGoogle === 429 || (statut === 429 && statutGoogle === null)){
+      if(retryApres !== null && retryApres > 0 && retryApres <= 86400)
+        return 'Limite d\'utilisation atteinte — réessayez dans environ ' + Math.ceil(retryApres) + ' secondes.';
+      return 'Limite d\'utilisation atteinte — réessayez dans quelques minutes.';
+    }
+    if(statutGoogle === 404)
+      return 'Le modèle IA configuré est introuvable. Vérifiez la configuration du service.';
+    if(statutGoogle === 400 || statutGoogle === 401 || statutGoogle === 403)
+      return 'Le service IA est indisponible en raison d\'un problème de configuration serveur.';
+    return 'Le service IA du fournisseur a renvoyé une erreur. Réessayez ultérieurement.';
+  }
 
   if(statut === 429){
     if(retryApres !== null && retryApres > 0 && retryApres <= 86400)
@@ -2080,7 +2096,7 @@ function iaMessageHttp(statut, data){
       return 'Connexion au service IA impossible — vérifiez le réseau.';
     if(cause === 'reponse_illisible')
       return 'Le service IA a renvoyé une réponse illisible. Réessayez.';
-    if(statutGoogle === 401 || statutGoogle === 403)
+    if(statutGoogle === 400 || statutGoogle === 401 || statutGoogle === 403)
       return 'Le service IA est momentanément indisponible en raison d\'un problème de configuration serveur.';
     return 'Le service IA est momentanément indisponible.';
   }
@@ -2090,7 +2106,6 @@ function iaMessageHttp(statut, data){
     return 'Le service IA est indisponible. Réessayez ultérieurement.';
   return 'Service IA indisponible (code ' + statut + ')' + (detail ? ' — ' + detail : '');
 }
-
 function geminiCall(prompt, imageB64, imageMime){
   if(typeof Auth === 'undefined' || !Auth.dispo() || !Auth.client){
     return Promise.reject(iaErreur(
