@@ -2035,11 +2035,53 @@ function iaTexteSur(s){
 // Messages destines a l'utilisateur. Ils ne contiennent jamais de jeton,
 // de cle ni d'identifiant technique.
 function iaMessageHttp(statut, data){
+  var cause = data && typeof data.cause === 'string' ? data.cause : '';
+  var statutGoogle = data && Number.isFinite(Number(data.statut_google)) ? Number(data.statut_google) : null;
+  var retryApres = data && Number.isFinite(Number(data.retry_apres_s)) ? Number(data.retry_apres_s) : null;
   var detail = (data && data.erreur) ? iaTexteSur(data.erreur) : '';
+
+  // Ces 401/403 concernent la session RestoPro reçue par la fonction.
+  // Les erreurs de clé Google doivent être relayées en 502 par le backend.
   if(statut === 401) return 'Session expirée — reliez à nouveau cet appareil (Paramètres → Configuration).';
   if(statut === 403) return 'Ce compte n\'est pas autorisé sur ce restaurant.';
-  if(statut === 429) return 'Limite d\'utilisation atteinte — réessayez dans quelques minutes.';
-  if(statut === 503) return 'Service IA momentanément indisponible.';
+
+  if(statut === 429){
+    if(retryApres !== null && retryApres > 0 && retryApres <= 86400)
+      return 'Limite d\'utilisation atteinte — réessayez dans environ ' + Math.ceil(retryApres) + ' secondes.';
+    return 'Limite d\'utilisation atteinte — réessayez dans quelques minutes.';
+  }
+
+  if(statut === 503){
+    if(cause === 'surcharge_sans_relance_budget')
+      return 'Le service IA de Google est temporairement surchargé. La nouvelle tentative n\'a pas pu être lancée dans le temps disponible. Réessayez dans quelques instants.';
+    if(cause === 'surcharge_sans_relance_lenteur')
+      return 'Le service IA de Google est temporairement surchargé et a répondu trop lentement pour une nouvelle tentative. Réessayez dans quelques instants.';
+    if(cause === 'surcharge_confirmee' || statutGoogle === 503)
+      return 'Le service IA de Google est temporairement surchargé. Réessayez dans quelques instants.';
+    return 'Service IA momentanément indisponible.';
+  }
+
+  if(statut === 504){
+    if(cause === 'surcharge_puis_plafond')
+      return 'Google a signalé une surcharge, puis l\'analyse a dépassé son délai maximal. Réessayez.';
+    if(cause === 'plafond_interne')
+      return 'L\'analyse IA a dépassé son délai maximal. Réessayez.';
+    return 'L\'analyse IA a dépassé son délai maximal. Réessayez.';
+  }
+
+  if(statut === 502){
+    if(cause === 'transport')
+      return 'Connexion au service IA impossible — vérifiez le réseau.';
+    if(cause === 'reponse_illisible')
+      return 'Le service IA a renvoyé une réponse illisible. Réessayez.';
+    if(statutGoogle === 401 || statutGoogle === 403)
+      return 'Le service IA est momentanément indisponible en raison d\'un problème de configuration serveur.';
+    return 'Le service IA est momentanément indisponible.';
+  }
+
+  // Ne pas exposer les détails bruts du fournisseur pour les erreurs internes.
+  if(statutGoogle !== null && statutGoogle !== 200)
+    return 'Le service IA est indisponible. Réessayez ultérieurement.';
   return 'Service IA indisponible (code ' + statut + ')' + (detail ? ' — ' + detail : '');
 }
 
