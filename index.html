@@ -977,21 +977,19 @@ function saveAllReel() {
     showSaveBadge(Math.round(json.length/1024));
   } catch(e) {
     if(e && (e.name==='QuotaExceededError'||e.code===22||e.code===1014)){
-      // Alléger et réessayer
-      data.auditLog = (auditLog||[]).slice(-30);
-      data.stockMouvements = restoFull('stockMouvements').slice(-30);
+      // En cas de quota, ne jamais supprimer ni tronquer les donnees
+      // metier ou les historiques de reception/stock/traçabilite pour
+      // faire croire que la sauvegarde a reussi.
+      // Seul l'historique IA, secondaire, est reduit pour le nouvel essai.
       data.iaHistorique = (iaHistorique||[]).slice(-5);
-      data.scanHistory = restoFull('scanHistory').slice(-20);
-      data.notificationsData = (notificationsData||[]).slice(-10);
-      data.photosData = (data.photosData||[]).slice(0,50);
-      // Historiques réduits mais jamais vidés (données métier)
-      data.stockSorties = restoFull('stockSorties').slice(-100);
-      data.stockControleHistorique = (stockControleHistorique||[]).slice(0,50);
-      data.recepItems = [];
       try {
         Storage.set(LS_KEY, data);
         showSaveBadge('!');
-      } catch(e2){ console.error('saveAll quota fatal', e2); }
+        showToast('Stockage presque plein : les donnees metier et les receptions ont ete conservees. Seul l’historique IA a ete reduit.', 'warning', 7000);
+      } catch(e2){
+        console.error('saveAll quota fatal', e2);
+        showToast('Sauvegarde impossible : espace local insuffisant. La derniere sauvegarde conservee n’a pas ete remplacee ; les modifications recentes restent a sauvegarder.', 'error', 9000);
+      }
     } else {
       console.error('saveAll:', e);
     }
