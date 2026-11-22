@@ -657,9 +657,8 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
       <div class="dot" id="d5" style="display:none"></div>
     </div>
     <div class="role-hint">
-      <span><strong>4 chiffres</strong> = Collaborateur</span>
-      <span><strong>5 chiffres</strong> = Responsable</span>
-      <span><strong>6 chiffres</strong> = Admin</span>
+      <span>Votre rôle est associé à votre compte.</span>
+      <span>Le serveur vérifie votre code PIN.</span>
     </div>
     <div class="keypad">
       <button class="key" onclick="kPress(1)">1</button>
@@ -678,7 +677,7 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
       <button class="btn-ok" id="btn-ok" onclick="kLogin()" disabled>OK</button>
     </div>
     <div class="pin-err" id="pin-err"></div>
-    <p class="demo-txt">Codes : <b>1234</b> · <b>12345</b> · <b>123456</b> · <b>956400</b></p>
+    <p class="demo-txt">Utilisez le code PIN attribué par votre établissement.</p>
   </div>
 </div>
 
@@ -778,13 +777,9 @@ div[style*="cursor:pointer"]:active { opacity: .85; }
 // ════════════════════════════════
 // DONNÉES UTILISATEURS
 // ════════════════════════════════
-var usersData = [
-  {id:1, nom:'Johnny Bauer',       role:'Administrateur', pin:'956400', actif:true, poste:'Direction', resto:'tous'},
-  {id:2, nom:'Anne-Sophie Messin', role:'Manager',        pin:'2222',   actif:true, poste:'Salle',     resto:'tous'},
-  {id:3, nom:'Collaborateur Demo', role:'Cuisinier',      pin:'1234',   actif:true, poste:'Cuisine',   resto:'resto1'},
-  {id:4, nom:'Responsable Demo',   role:'Responsable',    pin:'12345',  actif:true, poste:'Cuisine',   resto:'resto2'},
-  {id:5, nom:'Admin Demo',         role:'Administrateur', pin:'123456', actif:true, poste:'Direction', resto:'tous'}
-];
+// Aucun compte ni PIN de démonstration n'est livré dans le code public.
+// Les membres sont créés par l'administration après enrôlement serveur.
+var usersData = [];
 
 var currentUser = '';
 var currentResto = ''; // 'resto1' ou 'resto2'
@@ -1619,10 +1614,8 @@ function kChargement(actif){
 // ════════════════════════════════
 // PIN
 // ════════════════════════════════
-var PINS = {
-  '956400': {name:'Johnny Bauer',       role:'Administrateur'},
-  '2222':   {name:'Anne-Sophie Messin', role:'Manager'}
-};
+// Aucun PIN de secours ni compte privilégié codé en dur.
+var PINS = {};
 var pin = '';
 
 function kRefresh() {
@@ -1669,17 +1662,21 @@ function kErase() {
 
 // Recherche locale — ancien mecanisme, conserve comme secours.
 function kLoginLocal(){
-  var autoRole = pin.length === 4 ? 'Cuisinier' : pin.length === 5 ? 'Responsable' : 'Administrateur';
+  // Le rôle ne doit jamais être déduit de la longueur du PIN.
+  // Seuls les comptes locaux explicitement définis peuvent être résolus
+  // pendant la transition ; aucun compte/PIN de démonstration n'est livré.
   var trouve = null;
   for (var i = 0; i < usersData.length; i++) {
-    if (String(usersData[i].pin) === String(pin) && usersData[i].actif !== false) {
-      trouve = {name: usersData[i].nom, role: usersData[i].role || autoRole};
+    var u = usersData[i];
+    if (String(u.pin) === String(pin) && u.actif !== false) {
+      if (!u.role || !Object.prototype.hasOwnProperty.call(ROLES_APP_VERS_BASE, u.role)) {
+        return null;
+      }
+      trouve = {name: u.nom, role: u.role};
       break;
     }
   }
-  if (!trouve && typeof PINS !== 'undefined') trouve = PINS[pin];
-  if (trouve && !trouve.role) trouve.role = autoRole;
-  // Conversion des roles herites
+  // Conversion des rôles hérités ; aucune promotion implicite.
   if (trouve && ROLES_APP_VERS_BASE[trouve.role]) {
     trouve.role = ROLES_BASE_VERS_APP[ROLES_APP_VERS_BASE[trouve.role]] || trouve.role;
   }
